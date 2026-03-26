@@ -625,7 +625,7 @@ function showHostDetail(id) {
       <div class="dp-sec-title">Connection</div>
       <div class="dp-row"><span class="dp-k">Host</span><span class="dp-v">${h.host}</span></div>
       <div class="dp-row"><span class="dp-k">Node</span><span class="dp-v">${h.node}</span></div>
-      <div class="dp-row"><span class="dp-k">Template VMID</span><span class="dp-v">${h.templateVmId}</span></div>
+      <div class="dp-row"><span class="dp-k">Template Name</span><span class="dp-v">${h.templateName}</span></div>
       <div class="dp-row"><span class="dp-k">Storage</span><span class="dp-v">${h.storage}</span></div>
       <div class="dp-row"><span class="dp-k">Bridge</span><span class="dp-v">${h.bridge}</span></div>
     </div>
@@ -792,7 +792,7 @@ function openModal(type, id) {
       <div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" placeholder="root@pam!windeployment"></div>
       <div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div>
       <div class="g2">
-        <div class="ff"><label>Template VMID</label><input type="number" id="m-tmpl" autocomplete="off" value="9000"></div>
+        <div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" placeholder="win2025-template"></div>
         <div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="local-lvm"></div>
       </div>
       <div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="vmbr0"></div>`;
@@ -811,7 +811,7 @@ function openModal(type, id) {
       <div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" value="${h.tokenId}"></div>
       <div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password" placeholder="Leave blank to keep current"></div>
       <div class="g2">
-        <div class="ff"><label>Template VMID</label><input type="number" id="m-tmpl" autocomplete="off" value="${h.templateVmId}"></div>
+        <div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" value="${h.templateName}"></div>
         <div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="${h.storage}"></div>
       </div>
       <div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="${h.bridge}"></div>`;
@@ -881,7 +881,7 @@ function saveHost() {
     node:        $('m-node').value   || 'pve',
     tokenId:     $('m-tokid').value,
     tokenSecret: $('m-toksec').value,
-    templateVmId: +$('m-tmpl').value || 9000,
+    templateName: $('m-tmpl').value || 'win2025-template',
     storage:     $('m-stor').value   || 'local-lvm',
     bridge:      $('m-bridge').value || 'vmbr0',
     _open: true
@@ -899,7 +899,7 @@ function saveEditHost(id) {
   h.tokenId     = $('m-tokid').value || h.tokenId;
   const newSecret = $('m-toksec').value;
   if (newSecret) h.tokenSecret = newSecret;
-  h.templateVmId = +$('m-tmpl').value || h.templateVmId;
+  h.templateName = $('m-tmpl').value || h.templateName;
   h.storage     = $('m-stor').value  || h.storage;
   h.bridge      = $('m-bridge').value || h.bridge;
   persist(); closeModal(); renderAll();
@@ -1020,7 +1020,7 @@ app.get('/api/hosts', (req, res) =>
 );
 
 app.post('/api/hosts', async (req, res) => {
-  const { name, host, node, tokenId, tokenSecret, templateVmId, storage, bridge } = req.body;
+  const { name, host, node, tokenId, tokenSecret, templateName, storage, bridge } = req.body;
   if (!name || !host || !tokenId || !tokenSecret) return res.status(400).json({ error: 'name, host, tokenId, tokenSecret required' });
   try {
     const t = await pveCheck(host, tokenId, tokenSecret, node || 'pve');
@@ -1030,7 +1030,7 @@ app.post('/api/hosts', async (req, res) => {
   }
   const c = load();
   c.hosts = c.hosts.filter(h => h.host !== host);
-  c.hosts.push({ id: Date.now().toString(), name, host, node: node||'pve', tokenId, tokenSecret, templateVmId: +templateVmId||9000, storage: storage||'local-lvm', bridge: bridge||'vmbr0' });
+  c.hosts.push({ id: Date.now().toString(), name, host, node: node||'pve', tokenId, tokenSecret, templateName: templateName||'win2025-template', storage: storage||'local-lvm', bridge: bridge||'vmbr0' });
   save(c); res.json({ success: true });
 });
 
@@ -1134,7 +1134,7 @@ win_locale=${s.locale||'de-CH'}
   const extraVars = {
     proxmox_host:          h.host,
     proxmox_node:          h.node,
-    proxmox_template_vmid: +h.templateVmId,
+    proxmox_template_name: h.templateName || h.templateVmId || 'win2025-template',
     proxmox_storage:       h.storage,
     proxmox_bridge:        h.bridge,
     proxmox_token_id:      h.tokenId,
@@ -1270,7 +1270,7 @@ win_timezone: "W. Europe Standard Time"
 win_locale: "de-CH"
 proxmox_host: "192.168.1.2"
 proxmox_node: "pve"
-proxmox_template_vmid: 9000
+proxmox_template_name: "win2025-template"
 proxmox_storage: "local-lvm"
 proxmox_bridge: "vmbr0"
 EOF
@@ -1297,41 +1297,69 @@ content = r"""---
     pve_api_user:   "{{ proxmox_token_id.split('!')[0] }}"
     pve_token_name: "{{ proxmox_token_id.split('!')[1] if '!' in proxmox_token_id else proxmox_token_id }}"
 
-# Clone directly via shell — community.proxmox.proxmox_kvm clone requires a VM *name*,
-# but we only have the template VMID. qm clone works reliably with IDs.
-- name: Clone, resize, configure and start each VM via qm on Proxmox host
-  ansible.builtin.shell: |
-    set -e
-    TEMPLATE_ID={{ proxmox_template_vmid }}
-    HOSTNAME="{{ item.hostname }}"
-    TARGET_IP="{{ item.ip }}"
-    DISK_GB={{ item.disk }}
-    CORES={{ item.cpus }}
-    MEM={{ item.ram }}
-
-    # Find next free VMID (>= 100)
-    NEWID=$(pvesh get /cluster/nextid)
-    echo "Cloning template $TEMPLATE_ID -> $HOSTNAME (VMID=$NEWID)"
-
-    # Full clone
-    qm clone "$TEMPLATE_ID" "$NEWID" --name "$HOSTNAME" --full 1 --storage {{ proxmox_storage }}
-
-    # Set resources
-    qm set "$NEWID" --cores "$CORES" --memory "$MEM"
-
-    # Resize disk
-    qm resize "$NEWID" scsi0 "${DISK_GB}G" || true
-
-    # Cloud-Init: static IP, gateway, DNS, password
-    qm set "$NEWID"       --ipconfig0 "ip=${TARGET_IP}/{{ network_prefix_length }},gw={{ network_gateway }}"       --nameserver "{{ dns_primary }}"       --cipassword "{{ win_admin_pass }}"
-
-    # Start VM
-    qm start "$NEWID"
-    echo "Started $HOSTNAME (VMID=$NEWID)"
+# community.proxmox.proxmox_kvm clone requires the template VM *name* (not VMID).
+# We now store templateName in the host config, so this works via API token only.
+- name: Clone template to VM
+  community.proxmox.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
+    api_token_secret: "{{ proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    clone:            "{{ proxmox_template_name }}"
+    name:             "{{ item.hostname }}"
+    full:             true
+    storage:          "{{ proxmox_storage }}"
+    timeout:          300
+    state:            present
   loop: "{{ servers }}"
   loop_control:
     label: "{{ item.hostname }}"
-  delegate_to: "{{ proxmox_host }}"
+
+- name: Configure CPU and RAM
+  community.proxmox.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
+    api_token_secret: "{{ proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    name:             "{{ item.hostname }}"
+    cores:            "{{ item.cpus | int }}"
+    memory:           "{{ item.ram | int }}"
+    update:           true
+  loop: "{{ servers }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Apply Cloud-Init config via API
+  community.proxmox.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
+    api_token_secret: "{{ proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    name:             "{{ item.hostname }}"
+    ipconfig:
+      ipconfig0: "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}"
+    nameservers:      "{{ dns_primary }}"
+    cipassword:       "{{ win_admin_pass }}"
+    update:           true
+  loop: "{{ servers }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+
+- name: Start VMs
+  community.proxmox.proxmox_kvm:
+    api_host:         "{{ proxmox_host }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
+    api_token_secret: "{{ proxmox_token_secret }}"
+    node:             "{{ proxmox_node }}"
+    name:             "{{ item.hostname }}"
+    state:            started
+  loop: "{{ servers }}"
+  loop_control:
+    label: "{{ item.hostname }}"
 
 - name: Wait for VMs to boot (90s)
   ansible.builtin.pause:
