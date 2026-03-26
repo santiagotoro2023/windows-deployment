@@ -1177,6 +1177,7 @@ roles_path        = roles
 host_key_checking = False
 stdout_callback   = yaml
 timeout           = 60
+deprecation_warnings = False
 EOF
 
   # ---------------------------------------------------------------------------
@@ -1273,7 +1274,7 @@ content = r"""---
     state: present
 
 - name: Clone template to VM
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_user:         "root@pam"
     api_token_id:     "{{ proxmox_token_id }}"
@@ -1290,7 +1291,7 @@ content = r"""---
     label: "{{ item.hostname }}"
 
 - name: Configure CPU and RAM
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_user:         "root@pam"
     api_token_id:     "{{ proxmox_token_id }}"
@@ -1345,7 +1346,7 @@ content = r"""---
   delegate_to: "{{ proxmox_host }}"
 
 - name: Start VMs
-  community.general.proxmox_kvm:
+  community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
     api_user:         "root@pam"
     api_token_id:     "{{ proxmox_token_id }}"
@@ -1594,7 +1595,7 @@ install() {
 
   sec "Ansible"
   command -v ansible &>/dev/null || apt-get install -y -qq ansible >>"$LOG" 2>&1
-  ansible-galaxy collection install community.general community.windows ansible.windows >>"$LOG" 2>&1
+  ansible-galaxy collection install community.general community.windows ansible.windows community.proxmox >>"$LOG" 2>&1
   pip3 install proxmoxer requests pywinrm --break-system-packages >>"$LOG" 2>&1
   ok "Ansible + collections + Python deps"
 
