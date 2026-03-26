@@ -1297,81 +1297,41 @@ content = r"""---
     pve_api_user:   "{{ proxmox_token_id.split('!')[0] }}"
     pve_token_name: "{{ proxmox_token_id.split('!')[1] if '!' in proxmox_token_id else proxmox_token_id }}"
 
-- name: Clone template to VM
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    clone:            "{{ proxmox_template_vmid | int }}"
-    name:             "{{ item.hostname }}"
-    full:             true
-    storage:          "{{ proxmox_storage }}"
-    timeout:          300
-    state:            present
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-
-- name: Configure CPU and RAM
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    name:             "{{ item.hostname }}"
-    cores:            "{{ item.cpus }}"
-    memory:           "{{ item.ram }}"
-    update:           true
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-
-- name: Resize disk
+# Clone directly via shell — community.proxmox.proxmox_kvm clone requires a VM *name*,
+# but we only have the template VMID. qm clone works reliably with IDs.
+- name: Clone, resize, configure and start each VM via qm on Proxmox host
   ansible.builtin.shell: |
     set -e
-    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json       | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"'       | grep -o '"vmid":[0-9]*'       | awk -F: '{print $2}')
-    if [ -z "$VMID" ]; then
-      echo "ERROR: VM {{ item.hostname }} not found on node {{ proxmox_node }}"
-      exit 1
-    fi
-    echo "Resizing disk for {{ item.hostname }} (VMID=$VMID) to {{ item.disk }}G"
-    qm resize "$VMID" scsi0 {{ item.disk }}G
+    TEMPLATE_ID={{ proxmox_template_vmid }}
+    HOSTNAME="{{ item.hostname }}"
+    TARGET_IP="{{ item.ip }}"
+    DISK_GB={{ item.disk }}
+    CORES={{ item.cpus }}
+    MEM={{ item.ram }}
+
+    # Find next free VMID (>= 100)
+    NEWID=$(pvesh get /cluster/nextid)
+    echo "Cloning template $TEMPLATE_ID -> $HOSTNAME (VMID=$NEWID)"
+
+    # Full clone
+    qm clone "$TEMPLATE_ID" "$NEWID" --name "$HOSTNAME" --full 1 --storage {{ proxmox_storage }}
+
+    # Set resources
+    qm set "$NEWID" --cores "$CORES" --memory "$MEM"
+
+    # Resize disk
+    qm resize "$NEWID" scsi0 "${DISK_GB}G" || true
+
+    # Cloud-Init: static IP, gateway, DNS, password
+    qm set "$NEWID"       --ipconfig0 "ip=${TARGET_IP}/{{ network_prefix_length }},gw={{ network_gateway }}"       --nameserver "{{ dns_primary }}"       --cipassword "{{ win_admin_pass }}"
+
+    # Start VM
+    qm start "$NEWID"
+    echo "Started $HOSTNAME (VMID=$NEWID)"
   loop: "{{ servers }}"
   loop_control:
     label: "{{ item.hostname }}"
   delegate_to: "{{ proxmox_host }}"
-  ignore_errors: true
-
-- name: Apply Cloud-Init config
-  ansible.builtin.shell: |
-    set -e
-    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json       | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"'       | grep -o '"vmid":[0-9]*'       | awk -F: '{print $2}')
-    if [ -z "$VMID" ]; then
-      echo "ERROR: VM {{ item.hostname }} not found on node {{ proxmox_node }}"
-      exit 1
-    fi
-    echo "Applying Cloud-Init to {{ item.hostname }} (VMID=$VMID)"
-    qm set "$VMID"       --ipconfig0 "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}"       --nameserver "{{ dns_primary }}"       --cipassword "{{ win_admin_pass }}"
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-  delegate_to: "{{ proxmox_host }}"
-
-- name: Start VMs
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    name:             "{{ item.hostname }}"
-    state:            started
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
 
 - name: Wait for VMs to boot (90s)
   ansible.builtin.pause:
