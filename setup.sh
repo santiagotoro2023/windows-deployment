@@ -411,17 +411,29 @@ const hb   = id => S.hosts.find(h => h.id === id);
 const vb   = id => S.vms.find(v => v.id === id);
 const q    = () => ($('sb-input')||{}).value?.toLowerCase() || '';
 
-function persist() {
-  try { localStorage.setItem('wd6', JSON.stringify({ hosts:S.hosts, vms:S.vms, settings:S.settings })); } catch(_){}
+// ── API helpers ──────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers:{'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
 }
-function restore() {
+async function loadState() {
   try {
-    const d = JSON.parse(localStorage.getItem('wd6')||'{}');
-    if (d.hosts) S.hosts = d.hosts;
-    if (d.vms)   S.vms   = d.vms;
-    if (d.settings) Object.assign(S.settings, d.settings);
-  } catch(_){}
+    const [hosts, vms, settings] = await Promise.all([
+      fetch('/api/hosts').then(r=>r.json()),
+      fetch('/api/vms').then(r=>r.json()),
+      fetch('/api/settings').then(r=>r.json()),
+    ]);
+    S.hosts = hosts;
+    S.vms   = vms;
+    if (settings && Object.keys(settings).length) Object.assign(S.settings, settings);
+  } catch(e) { toast('Failed to load state: ' + e.message); }
 }
+// Legacy no-op — state is now in the backend
+function persist() {}
 
 function toast(msg, isErr=true) {
   const t = $('toast');
@@ -693,13 +705,7 @@ async function startDeploy() {
     const res = await fetch('/api/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        config: {
-          hosts:    S.hosts,
-          vms:      S.vms,
-          settings: S.settings
-        }
-      })
+      body: JSON.stringify({})
     });
     const data = await res.json();
     if (!res.ok) {
@@ -758,7 +764,7 @@ function stopDeploy() {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-function saveSettings() {
+async function saveSettings() {
   S.settings.net    = $('s-net').value;
   S.settings.gw     = $('s-gw').value;
   S.settings.pfx    = +$('s-pfx').value || 24;
@@ -770,7 +776,7 @@ function saveSettings() {
   S.settings.pass   = $('s-pass').value;
   S.settings.tz     = $('s-tz').value;
   S.settings.locale = $('s-locale').value;
-  persist();
+  try { await api('PUT', '/api/settings', S.settings); } catch(e) { toast(e.message); return; }
   const btn = $('save-btn');
   btn.textContent = '✓ Saved'; btn.style.background = 'var(--green)'; btn.style.color = '#000';
   setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; btn.style.color = ''; }, 1600);
@@ -873,7 +879,7 @@ function applyRoleDef(role) {
   if (r.dram) $('m-ram').value  = r.dram;
 }
 
-function saveHost() {
+async function saveHost() {
   const n = ($('m-name').value||'').trim(), h = ($('m-host').value||'').trim();
   if (!n||!h) { toast('Name and host IP required'); return; }
   const newHost = {
@@ -886,12 +892,16 @@ function saveHost() {
     bridge:      $('m-bridge').value || 'vmbr0',
     _open: true
   };
-  S.hosts.push(newHost);
-  persist(); closeModal(); renderAll();
-  toast('Host added', false);
+  try {
+    const saved = await api('POST', '/api/hosts', newHost);
+    if (saved.id) newHost.id = saved.id;
+    S.hosts.push(newHost);
+    closeModal(); renderAll();
+    toast('Host added', false);
+  } catch(e) { toast(e.message); }
 }
 
-function saveEditHost(id) {
+async function saveEditHost(id) {
   const h = hb(id); if (!h) return;
   h.name        = $('m-name').value  || h.name;
   h.host        = $('m-host').value  || h.host;
@@ -902,17 +912,19 @@ function saveEditHost(id) {
   h.templateName = $('m-tmpl').value || h.templateName;
   h.storage     = $('m-stor').value  || h.storage;
   h.bridge      = $('m-bridge').value || h.bridge;
-  persist(); closeModal(); renderAll();
-  if (S.selHost === id) showHostDetail(id);
-  toast('Host updated', false);
+  try {
+    await api('PUT', '/api/hosts/' + id, h);
+    closeModal(); renderAll();
+    if (S.selHost === id) showHostDetail(id);
+    toast('Host updated', false);
+  } catch(e) { toast(e.message); }
 }
 
-function saveVm() {
+async function saveVm() {
   const hn = ($('m-hn').value||'').trim(), ip = ($('m-ip').value||'').trim();
   if (!hn||!ip) { toast('Hostname and IP required'); return; }
   if (!S.hosts.length) { toast('Add a Proxmox host first'); return; }
-  S.vms.push({
-    id: uid(),
+  const newVm = {
     hostId: $('m-hid').value || S.hosts[0].id,
     role:   $('m-role').value,
     hostname: hn,
@@ -922,11 +934,15 @@ function saveVm() {
     ram:   +$('m-ram').value  || S.settings.ram,
     disk:  +$('m-disk').value || S.settings.disk,
     status: 'pending', prog: 0
-  });
-  persist(); closeModal(); renderAll();
+  };
+  try {
+    const saved = await api('POST', '/api/vms', newVm);
+    if (saved.vm) S.vms.push(saved.vm); else { newVm.id = 'v'+Date.now(); S.vms.push(newVm); }
+    closeModal(); renderAll();
+  } catch(e) { toast(e.message); }
 }
 
-function saveEditVm(id) {
+async function saveEditVm(id) {
   const v = vb(id); if (!v) return;
   v.role     = $('e-role').value;
   v.hostname = $('e-hn').value || v.hostname;
@@ -936,18 +952,27 @@ function saveEditVm(id) {
   v.ram      = +$('e-ram').value  || v.ram;
   v.disk     = +$('e-disk').value || v.disk;
   if ($('e-hid')) v.hostId = $('e-hid').value;
-  persist(); closeModal(); renderAll(); showVmDetail(id);
+  try {
+    await api('PUT', '/api/vms/' + id, v);
+    closeModal(); renderAll(); showVmDetail(id);
+  } catch(e) { toast(e.message); }
 }
 
-function delVm(id) {
+async function delVm(id) {
   if (!confirm('Remove VM? This does not delete it from Proxmox.')) return;
-  S.vms = S.vms.filter(v => v.id !== id); persist(); closeDetail(); renderAll();
+  try {
+    await api('DELETE', '/api/vms/' + id);
+    S.vms = S.vms.filter(v => v.id !== id); closeDetail(); renderAll();
+  } catch(e) { toast(e.message); }
 }
-function delHost(id) {
+async function delHost(id) {
   if (!confirm('Remove host and all its VM definitions?')) return;
-  S.hosts = S.hosts.filter(h => h.id !== id);
-  S.vms   = S.vms.filter(v => v.hostId !== id);
-  persist(); closeDetail(); renderAll();
+  try {
+    await api('DELETE', '/api/hosts/' + id);
+    S.hosts = S.hosts.filter(h => h.id !== id);
+    S.vms   = S.vms.filter(v => v.hostId !== id);
+    closeDetail(); renderAll();
+  } catch(e) { toast(e.message); }
 }
 function closeModal() { $('modal-bg').classList.remove('open'); }
 function renderAll() {
@@ -963,9 +988,28 @@ document.querySelectorAll('.tnb').forEach(b => {
   });
 });
 
-restore();
-syncSettingsForm();
-renderAll();
+// Load all state from backend on startup
+(async () => {
+  await loadState();
+  syncSettingsForm();
+  renderAll();
+  // Also check if a deploy is already running (survived page reload)
+  const status = await fetch('/api/deploy/status').then(r=>r.json()).catch(()=>({}));
+  if (status.running) {
+    S.deploying = true;
+    $('dep-btn').disabled = true;
+    $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono);animation:blink .8s infinite">● LIVE</span>';
+    $('deploy-status-bar').classList.add('visible');
+    _pollInterval = setInterval(pollDeployStatus, 1500);
+  } else if (status.log) {
+    $('log').textContent = status.log;
+    if (status.exitCode !== 0 && status.exitCode !== undefined) {
+      $('log').style.color = 'var(--red)';
+      $('log').style.borderColor = 'var(--red)';
+      setTimeout(() => { $('log').style.color = ''; $('log').style.borderColor = ''; }, 5000);
+    }
+  }
+})();
 </script>
 </body>
 </html>
@@ -1072,16 +1116,22 @@ app.get('/api/settings', (req, res) => res.json(load().settings || {}));
 app.put('/api/settings', (req, res) => { const c = load(); c.settings = req.body; save(c); res.json({ success: true }); });
 
 // ── Deploy ────────────────────────────────────────────────────────────────────
-let running = false;
-let deployLog = '';
-let lastExitCode = 0;
+// Deploy state — written to disk so page-reload shows current log
+const DEPLOY_STATE_FILE = path.join(__dirname, 'data', 'deploy_state.json');
+function loadDeployState() {
+  try { return JSON.parse(fs.readFileSync(DEPLOY_STATE_FILE, 'utf8')); } catch { return { running: false, log: '', exitCode: 0 }; }
+}
+function saveDeployState(s) {
+  try { fs.writeFileSync(DEPLOY_STATE_FILE, JSON.stringify(s)); } catch(_) {}
+}
+let { running, log: deployLog, exitCode: lastExitCode } = loadDeployState();
+// If server restarted mid-deploy, mark as finished
+if (running) { running = false; deployLog += '\n[restarted — deploy state reset]\n'; saveDeployState({ running, log: deployLog, exitCode: lastExitCode }); }
 
 app.post('/api/deploy', (req, res) => {
   if (running) return res.status(409).json({ error: 'Deploy already running' });
 
-  // ── FIX: Konfiguration aus dem Request-Body verwenden (vom Frontend),
-  //         Fallback auf config.json falls nichts mitgeschickt wurde.
-  const c = (req.body && req.body.config) ? req.body.config : load();
+  const c = load();  // always read from config.json — frontend syncs state via API
 
   if (!c.hosts?.length) return res.status(400).json({ error: 'No Proxmox hosts configured' });
   if (!c.vms?.length)   return res.status(400).json({ error: 'No VMs configured' });
@@ -1154,17 +1204,24 @@ win_locale=${s.locale||'de-CH'}
 
   deployLog = '';
   running = true;
+  lastExitCode = 0;
+  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
   res.json({ success: true });
 
   const cmd = `cd "${ADIR}" && $(python3 -c "import shutil; print(shutil.which('ansible-playbook') or '/usr/local/bin/ansible-playbook')") site.yml -i inventory/hosts.ini -e "@inventory/_extra_vars.json" 2>&1`;
   const proc = exec(cmd);
 
-  proc.stdout?.on('data', d => { deployLog += d; });
-  proc.stderr?.on('data', d => { deployLog += d; });
+  let flushTimer = null;
+  function flushLog() {
+    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+  }
+  proc.stdout?.on('data', d => { deployLog += d; clearTimeout(flushTimer); flushTimer = setTimeout(flushLog, 500); });
+  proc.stderr?.on('data', d => { deployLog += d; clearTimeout(flushTimer); flushTimer = setTimeout(flushLog, 500); });
   proc.on('close', code => {
     running = false;
     lastExitCode = code;
     deployLog += `\n[windows-deployment] Process exited with code ${code}\n`;
+    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
     try { fs.unlinkSync(evFile); } catch(_) {}
   });
 });
