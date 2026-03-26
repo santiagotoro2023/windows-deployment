@@ -163,7 +163,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .btn-dep{background:var(--green);color:#000;font-weight:600;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em}.btn-dep:hover{filter:brightness(1.1)}.btn-dep:disabled{opacity:.3;cursor:not-allowed}
 .btn-sm{padding:3px 9px;font-size:11px}.btn-fw{width:100%}
 
-/* FIX: suppress password manager on all inputs */
 .ff{margin-bottom:9px}
 .ff label{display:block;font-size:10.5px;color:var(--text2);margin-bottom:3px;font-weight:500;letter-spacing:.02em}
 .ff input,.ff select{width:100%;background:var(--panel2);border:1px solid var(--b1);color:var(--text);padding:5px 8px;border-radius:var(--rad);font-size:12px;font-family:var(--sans);outline:none;transition:border-color .12s;appearance:none}
@@ -199,7 +198,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .pill{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9.5px;font-family:var(--mono);font-weight:500}
 .empty{text-align:center;padding:36px 0;color:var(--text3)}.empty p{font-size:12px;margin-top:6px}
 
-/* deploy status bar */
 #deploy-status-bar{display:none;align-items:center;gap:8px;padding:6px 14px;background:var(--panel2);border-bottom:1px solid var(--b1);font-size:11px;font-family:var(--mono);color:var(--text2)}
 #deploy-status-bar.visible{display:flex}
 .dsb-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:blink .8s infinite;flex-shrink:0}
@@ -212,13 +210,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .mhd h3{font-size:13px;font-weight:600}
 .mbd{padding:16px}.mft{padding:9px 16px;border-top:1px solid var(--b1);display:flex;gap:5px;justify-content:flex-end;position:sticky;bottom:0;background:var(--panel)}
 
-/* error toast */
 #toast{position:fixed;bottom:20px;right:20px;background:var(--red-d);border:1px solid var(--red);color:var(--text);padding:10px 14px;border-radius:var(--rad2);font-size:12px;font-family:var(--mono);z-index:999;display:none;max-width:360px;word-break:break-word}
 #toast.show{display:block;animation:fi .2s ease}
 </style>
 </head>
 <body>
-<!-- deploy running indicator -->
 <div id="deploy-status-bar">
   <div class="dsb-dot"></div>
   <span id="dsb-text">Deploy running…</span>
@@ -402,7 +398,6 @@ const ST = {
 const ST_CLS = { running:'st-run', stopped:'st-stop', cloning:'st-clone', configuring:'st-conf', pending:'st-pend' };
 
 // ── State ────────────────────────────────────────────────────────────────────
-// Settings defaults — disk default is 75GB
 let S = {
   hosts:[], vms:[], selVm:null, selHost:null,
   flt:'all', view:'overview', deploying:false,
@@ -424,7 +419,6 @@ function restore() {
     const d = JSON.parse(localStorage.getItem('wd6')||'{}');
     if (d.hosts) S.hosts = d.hosts;
     if (d.vms)   S.vms   = d.vms;
-    // Merge settings so new keys get defaults
     if (d.settings) Object.assign(S.settings, d.settings);
   } catch(_){}
 }
@@ -445,7 +439,6 @@ function setView(v, btn) {
   document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
   $('view-'+v).classList.add('active');
   document.querySelectorAll('.tnb').forEach(b => b.classList.remove('act'));
-  // Find matching button if not passed
   if (!btn) document.querySelectorAll('.tnb').forEach(b => { if (b.getAttribute('onclick')?.includes("'"+v+"'")) b.classList.add('act'); });
   else btn.classList.add('act');
   if (v === 'deploy') renderDeploy();
@@ -457,19 +450,18 @@ function setFlt(f, btn) {
   renderGrid();
 }
 
-// Populate settings form from S.settings whenever settings view is shown
 function syncSettingsForm() {
   const s = S.settings;
-  $('s-net').value   = s.net   || '192.168.1';
-  $('s-gw').value    = s.gw    || '192.168.1.1';
-  $('s-pfx').value   = s.pfx   || 24;
-  $('s-dns1').value  = s.dns1  || '8.8.8.8';
-  $('s-dns2').value  = s.dns2  || '8.8.4.4';
-  $('s-cpus').value  = s.cpus  || 2;
-  $('s-ram').value   = s.ram   || 4096;
-  $('s-disk').value  = s.disk  || 75;
-  $('s-pass').value  = s.pass  || 'ChangeMe123!';
-  $('s-tz').value    = s.tz    || 'W. Europe Standard Time';
+  $('s-net').value    = s.net    || '192.168.1';
+  $('s-gw').value     = s.gw     || '192.168.1.1';
+  $('s-pfx').value    = s.pfx    || 24;
+  $('s-dns1').value   = s.dns1   || '8.8.8.8';
+  $('s-dns2').value   = s.dns2   || '8.8.4.4';
+  $('s-cpus').value   = s.cpus   || 2;
+  $('s-ram').value    = s.ram    || 4096;
+  $('s-disk').value   = s.disk   || 75;
+  $('s-pass').value   = s.pass   || 'ChangeMe123!';
+  $('s-tz').value     = s.tz     || 'W. Europe Standard Time';
   $('s-locale').value = s.locale || 'de-CH';
 }
 
@@ -683,7 +675,7 @@ function renderDeploy() {
   }).join('');
 }
 
-// ── Deploy — real API calls + live log polling ─────────────────────────────
+// ── Deploy — sendet Frontend-Konfiguration ans Backend ─────────────────────
 let _pollInterval = null;
 
 async function startDeploy() {
@@ -697,7 +689,18 @@ async function startDeploy() {
   $('log').textContent = '[windows-deployment] Sending deploy request…\n';
 
   try {
-    const res = await fetch('/api/deploy', { method:'POST', headers:{'Content-Type':'application/json'} });
+    // ── FIX: Konfiguration aus dem Frontend-State mitschicken ──────────────
+    const res = await fetch('/api/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        config: {
+          hosts:    S.hosts,
+          vms:      S.vms,
+          settings: S.settings
+        }
+      })
+    });
     const data = await res.json();
     if (!res.ok) {
       toast(data.error || 'Deploy failed to start');
@@ -713,7 +716,6 @@ async function startDeploy() {
   $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono);animation:blink .8s infinite">● LIVE</span>';
   $('deploy-status-bar').classList.add('visible');
 
-  // Poll status every 1.5s
   _pollInterval = setInterval(pollDeployStatus, 1500);
 }
 
@@ -763,7 +765,7 @@ function saveSettings() {
 // ── Modals ────────────────────────────────────────────────────────────────────
 function openModal(type, id) {
   $('modal-bg').classList.add('open');
-  const s = S.settings; // Always read live settings
+  const s = S.settings;
 
   if (type === 'host') {
     $('modal-title').textContent = 'Add Proxmox Host';
@@ -803,7 +805,6 @@ function openModal(type, id) {
   }
 
   if (type === 'vm') {
-    // Read defaults fresh from S.settings at modal-open time
     const defRole = ROLES['dc'];
     $('modal-title').textContent = 'Add VM';
     $('modal-body').innerHTML = `
@@ -852,12 +853,10 @@ function openModal(type, id) {
   }
 }
 
-// Role dropdown changes → update cpu/ram, keep disk from settings
 function applyRoleDef(role) {
   const r = ROLES[role]||{};
   if (r.dcpu) $('m-cpus').value = r.dcpu;
   if (r.dram) $('m-ram').value  = r.dram;
-  // disk stays as whatever global default is set
 }
 
 function saveHost() {
@@ -865,12 +864,12 @@ function saveHost() {
   if (!n||!h) { toast('Name and host IP required'); return; }
   const newHost = {
     id: uid(), name:n, host:h,
-    node:     $('m-node').value  || 'pve',
-    tokenId:  $('m-tokid').value,
+    node:        $('m-node').value   || 'pve',
+    tokenId:     $('m-tokid').value,
     tokenSecret: $('m-toksec').value,
     templateVmId: +$('m-tmpl').value || 9000,
-    storage:  $('m-stor').value   || 'local-lvm',
-    bridge:   $('m-bridge').value || 'vmbr0',
+    storage:     $('m-stor').value   || 'local-lvm',
+    bridge:      $('m-bridge').value || 'vmbr0',
     _open: true
   };
   S.hosts.push(newHost);
@@ -885,7 +884,7 @@ function saveEditHost(id) {
   h.node        = $('m-node').value  || h.node;
   h.tokenId     = $('m-tokid').value || h.tokenId;
   const newSecret = $('m-toksec').value;
-  if (newSecret) h.tokenSecret = newSecret; // only update if not blank
+  if (newSecret) h.tokenSecret = newSecret;
   h.templateVmId = +$('m-tmpl').value || h.templateVmId;
   h.storage     = $('m-stor').value  || h.storage;
   h.bridge      = $('m-bridge').value || h.bridge;
@@ -898,13 +897,11 @@ function saveVm() {
   const hn = ($('m-hn').value||'').trim(), ip = ($('m-ip').value||'').trim();
   if (!hn||!ip) { toast('Hostname and IP required'); return; }
   if (!S.hosts.length) { toast('Add a Proxmox host first'); return; }
-  // VM name = hostname exactly
   S.vms.push({
     id: uid(),
     hostId: $('m-hid').value || S.hosts[0].id,
     role:   $('m-role').value,
     hostname: hn,
-    // name field mirrors hostname — used as Proxmox VM name
     name: hn,
     ip,
     cpus:  +$('m-cpus').value || S.settings.cpus,
@@ -919,7 +916,7 @@ function saveEditVm(id) {
   const v = vb(id); if (!v) return;
   v.role     = $('e-role').value;
   v.hostname = $('e-hn').value || v.hostname;
-  v.name     = v.hostname; // keep in sync
+  v.name     = v.hostname;
   v.ip       = $('e-ip').value  || v.ip;
   v.cpus     = +$('e-cpus').value || v.cpus;
   v.ram      = +$('e-ram').value  || v.ram;
@@ -946,7 +943,6 @@ function renderAll() {
   else if (S.selHost) showHostDetail(S.selHost);
 }
 
-// Sync settings form whenever the settings tab is opened
 document.querySelectorAll('.tnb').forEach(b => {
   b.addEventListener('click', () => {
     if (b.getAttribute('onclick')?.includes("'settings'")) syncSettingsForm();
@@ -962,7 +958,7 @@ renderAll();
 HTML_EOF
 
   # ---------------------------------------------------------------------------
-  # backend/server.js — fixed deploy: builds inventory + passes servers var
+  # backend/server.js
   # ---------------------------------------------------------------------------
   cat > "${DIR}/backend/server.js" << 'JS_EOF'
 const express  = require('express');
@@ -1027,7 +1023,6 @@ app.post('/api/hosts', async (req, res) => {
 app.put('/api/hosts/:id', (req, res) => {
   const c = load(); const i = c.hosts.findIndex(h => h.id === req.params.id);
   if (i === -1) return res.status(404).json({ error: 'Host not found' });
-  // Only update tokenSecret if provided (not blank)
   const update = { ...req.body };
   if (!update.tokenSecret) delete update.tokenSecret;
   c.hosts[i] = { ...c.hosts[i], ...update, id: req.params.id };
@@ -1069,7 +1064,10 @@ let deployLog = '';
 app.post('/api/deploy', (req, res) => {
   if (running) return res.status(409).json({ error: 'Deploy already running' });
 
-  const c = load();
+  // ── FIX: Konfiguration aus dem Request-Body verwenden (vom Frontend),
+  //         Fallback auf config.json falls nichts mitgeschickt wurde.
+  const c = (req.body && req.body.config) ? req.body.config : load();
+
   if (!c.hosts?.length) return res.status(400).json({ error: 'No Proxmox hosts configured' });
   if (!c.vms?.length)   return res.status(400).json({ error: 'No VMs configured' });
 
@@ -1107,7 +1105,6 @@ win_locale=${s.locale||'de-CH'}
   fs.writeFileSync(INV, ini);
 
   // ── Build servers JSON for proxmox_provision role ─────────────────────────
-  // This is passed as extra-vars so the provision role knows what to clone
   const serversJson = JSON.stringify(c.vms.map(v => ({
     hostname: v.hostname,
     ip:       v.ip,
@@ -1117,25 +1114,24 @@ win_locale=${s.locale||'de-CH'}
     role:     v.role,
   })));
 
-  // Build extra-vars string
   const extraVars = {
-    proxmox_host:         h.host,
-    proxmox_node:         h.node,
+    proxmox_host:          h.host,
+    proxmox_node:          h.node,
     proxmox_template_vmid: h.templateVmId,
-    proxmox_storage:      h.storage,
-    proxmox_bridge:       h.bridge,
-    proxmox_token_id:     h.tokenId,
-    proxmox_token_secret: h.tokenSecret,
-    win_admin_pass:       s.pass || 'ChangeMe123!',
-    network_gateway:      s.gw   || '192.168.1.1',
-    network_prefix_length: s.pfx || 24,
-    dns_primary:          s.dns1 || '8.8.8.8',
-    dns_secondary:        s.dns2 || '8.8.4.4',
-    win_timezone:         s.tz   || 'W. Europe Standard Time',
-    win_locale:           s.locale || 'de-CH',
+    proxmox_storage:       h.storage,
+    proxmox_bridge:        h.bridge,
+    proxmox_token_id:      h.tokenId,
+    proxmox_token_secret:  h.tokenSecret,
+    win_admin_pass:        s.pass || 'ChangeMe123!',
+    network_gateway:       s.gw   || '192.168.1.1',
+    network_prefix_length: s.pfx  || 24,
+    dns_primary:           s.dns1 || '8.8.8.8',
+    dns_secondary:         s.dns2 || '8.8.4.4',
+    win_timezone:          s.tz   || 'W. Europe Standard Time',
+    win_locale:            s.locale || 'de-CH',
   };
 
-  // Write extra-vars to a temp JSON file (avoids shell quoting issues with JSON arrays)
+  // Extra-vars als JSON-Datei schreiben (vermeidet Shell-Quoting-Probleme)
   const evFile = path.join(ADIR, 'inventory', '_extra_vars.json');
   fs.writeFileSync(evFile, JSON.stringify({ ...extraVars, servers: JSON.parse(serversJson) }));
 
@@ -1151,7 +1147,6 @@ win_locale=${s.locale||'de-CH'}
   proc.on('close', code => {
     running = false;
     deployLog += `\n[windows-deployment] Process exited with code ${code}\n`;
-    // Clean up temp file
     try { fs.unlinkSync(evFile); } catch(_) {}
   });
 });
@@ -1261,7 +1256,6 @@ EOF
 
   # ---------------------------------------------------------------------------
   # ROLE: proxmox_provision
-  # Uses the `servers` list from extra-vars JSON
   # ---------------------------------------------------------------------------
   cat > "${DIR}/ansible/roles/proxmox_provision/tasks/main.yml" << 'EOF'
 ---
@@ -1272,7 +1266,6 @@ EOF
       - requests
     state: present
 
-# Clone a full copy of the template for each VM
 - name: Clone template → VM
   community.general.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
@@ -1290,7 +1283,6 @@ EOF
   loop_control:
     label: "{{ item.hostname }}"
 
-# Set CPU and RAM from VM definition
 - name: Configure CPU and RAM
   community.general.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
@@ -1306,7 +1298,6 @@ EOF
   loop_control:
     label: "{{ item.hostname }}"
 
-# Resize disk to configured size
 - name: Resize disk
   ansible.builtin.shell: |
     set -e
@@ -1325,9 +1316,8 @@ print(match[0])
   loop_control:
     label: "{{ item.hostname }}"
   delegate_to: "{{ proxmox_host }}"
-  ignore_errors: true  # Non-fatal: template disk may already be >= target size
+  ignore_errors: true
 
-# Inject Cloud-Init: static IP, gateway, DNS, admin password
 - name: Apply Cloud-Init config
   ansible.builtin.shell: |
     set -e
@@ -1350,7 +1340,6 @@ print(match[0])
     label: "{{ item.hostname }}"
   delegate_to: "{{ proxmox_host }}"
 
-# Start all VMs
 - name: Start VMs
   community.general.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
@@ -1364,14 +1353,13 @@ print(match[0])
   loop_control:
     label: "{{ item.hostname }}"
 
-# Wait for Cloud-Init to run and Windows to finish booting
 - name: Wait for VMs to boot (90s)
   ansible.builtin.pause:
     seconds: 90
 EOF
 
   # ---------------------------------------------------------------------------
-  # ROLE: common — runs on every VM
+  # ROLE: common
   # ---------------------------------------------------------------------------
   cat > "${DIR}/ansible/roles/common/tasks/main.yml" << 'EOF'
 ---
@@ -1467,12 +1455,10 @@ EOF
 EOF
 
   # ---------------------------------------------------------------------------
-  # ROLE: backupserver — blank, base config only
+  # ROLE: backupserver
   # ---------------------------------------------------------------------------
   cat > "${DIR}/ansible/roles/backupserver/tasks/main.yml" << 'EOF'
 ---
-# Blank — base config (hostname, timezone, DNS, RDP) already applied by common role
-# Install backup software manually on this server after deployment
 - name: Backup server ready
   ansible.builtin.debug:
     msg: "{{ inventory_hostname }} ready — install Veeam B&R or other backup software manually"

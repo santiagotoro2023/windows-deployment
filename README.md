@@ -1,7 +1,7 @@
 # windows-deployment
 
-Automated Windows Server 2025 deployment on Proxmox VE.  
-Clone VMs, set static IPs, enable RDP, install Windows role features.
+Automated Windows Server 2025 deployment on Proxmox VE. 
+Clone VMs, set static IPs, enable RDP, install Windows role features. All automatically with a WebUI that uses ansible for the creating, starting and configuring of the resulting VMs.
 
 ## Install
 
