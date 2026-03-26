@@ -1594,9 +1594,13 @@ install() {
   ok "Node.js $(node --version)"
 
   sec "Ansible"
-  command -v ansible &>/dev/null || apt-get install -y -qq ansible >>"$LOG" 2>&1
+  # apt gibt Ansible 2.14 — zu alt für community.proxmox/windows Collections.
+  # pip installiert die aktuelle Version (2.17+) die alle Collections unterstützt.
+  pip3 install --break-system-packages --upgrade ansible proxmoxer requests pywinrm >>"$LOG" 2>&1
+  # Sicherstellen dass ansible im PATH ist (pip installiert nach ~/.local/bin oder /usr/local/bin)
+  export PATH="$PATH:/usr/local/bin:$HOME/.local/bin"
+  ansible --version >>"$LOG" 2>&1
   ansible-galaxy collection install community.general community.windows ansible.windows community.proxmox >>"$LOG" 2>&1
-  pip3 install proxmoxer requests pywinrm --break-system-packages >>"$LOG" 2>&1
   ok "Ansible + collections + Python deps"
 
   sec "Application"
@@ -1615,6 +1619,7 @@ After=network.target
 Type=simple
 WorkingDirectory=${DIR}/backend
 Environment=PORT=${PORT}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/node ${DIR}/backend/server.js
 Restart=on-failure
 RestartSec=5
