@@ -728,10 +728,24 @@ async function pollDeployStatus() {
       log.textContent = data.log;
       log.scrollTop = log.scrollHeight;
     }
-    $('dsb-text').textContent = data.running ? 'Deploy running…' : 'Deploy finished';
     if (!data.running) {
-      $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">✓ Done</span>';
+      const failed = data.exitCode !== 0;
+      if (failed) {
+        log.style.color = 'var(--red)';
+        log.style.borderColor = 'var(--red)';
+        $('live-b').innerHTML = '<span style="font-size:10px;color:var(--red);font-family:var(--mono)">✗ FAILED (code '+data.exitCode+')</span>';
+        $('dsb-text').textContent = 'Deploy failed';
+        setTimeout(() => {
+          log.style.color = '';
+          log.style.borderColor = '';
+        }, 5000);
+      } else {
+        $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">✓ Done</span>';
+        $('dsb-text').textContent = 'Deploy finished';
+      }
       stopDeploy();
+    } else {
+      $('dsb-text').textContent = 'Deploy running…';
     }
   } catch(_) {}
 }
@@ -1060,6 +1074,7 @@ app.put('/api/settings', (req, res) => { const c = load(); c.settings = req.body
 // ── Deploy ────────────────────────────────────────────────────────────────────
 let running = false;
 let deployLog = '';
+let lastExitCode = 0;
 
 app.post('/api/deploy', (req, res) => {
   if (running) return res.status(409).json({ error: 'Deploy already running' });
@@ -1119,7 +1134,7 @@ win_locale=${s.locale||'de-CH'}
   const extraVars = {
     proxmox_host:          h.host,
     proxmox_node:          h.node,
-    proxmox_template_vmid: h.templateVmId,
+    proxmox_template_vmid: +h.templateVmId,
     proxmox_storage:       h.storage,
     proxmox_bridge:        h.bridge,
     proxmox_token_id:      h.tokenId,
@@ -1148,13 +1163,14 @@ win_locale=${s.locale||'de-CH'}
   proc.stderr?.on('data', d => { deployLog += d; });
   proc.on('close', code => {
     running = false;
+    lastExitCode = code;
     deployLog += `\n[windows-deployment] Process exited with code ${code}\n`;
     try { fs.unlinkSync(evFile); } catch(_) {}
   });
 });
 
 app.get('/api/deploy/status', (req, res) => {
-  res.json({ running, log: deployLog });
+  res.json({ running, log: deployLog, exitCode: lastExitCode });
 });
 
 // ── Static frontend ────────────────────────────────────────────────────────
@@ -1288,7 +1304,7 @@ content = r"""---
     api_token_id:     "{{ pve_token_name }}"
     api_token_secret: "{{ proxmox_token_secret }}"
     node:             "{{ proxmox_node }}"
-    clone:            "{{ proxmox_template_vmid }}"
+    clone:            "{{ proxmox_template_vmid | int }}"
     name:             "{{ item.hostname }}"
     full:             true
     storage:          "{{ proxmox_storage }}"
