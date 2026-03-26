@@ -1259,11 +1259,12 @@ EOF
   # ---------------------------------------------------------------------------
   # ROLE: proxmox_provision
   # ---------------------------------------------------------------------------
-  # Write proxmox_provision tasks using python to avoid heredoc indentation issues in YAML
-  python3 - << 'PYEOF'
-import os
-content = """\
----
+  # Write proxmox_provision tasks via python to guarantee correct YAML indentation.
+  # IMPORTANT: The shell blocks use only bash/awk for VMID lookup — no inline Python —
+  # because Ansible parses the YAML *before* the shell runs, and "import sys, json"
+  # looks like a broken YAML key, causing "could not find expected ':'" errors.
+  python3 /dev/stdin << 'PYEOF'
+content = r"""---
 - name: Install proxmoxer Python library
   ansible.builtin.pip:
     name:
@@ -1306,17 +1307,16 @@ content = """\
 - name: Resize disk
   ansible.builtin.shell: |
     set -e
-    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json | \\
-      python3 -c "
-import sys, json
-vms = json.load(sys.stdin)
-match = [v['vmid'] for v in vms if v['name'] == '{{ item.hostname }}']
-if not match:
-    raise SystemExit('VM {{ item.hostname }} not found')
-print(match[0])
-")
+    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json \
+      | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"' \
+      | grep -o '"vmid":[0-9]*' \
+      | awk -F: '{print $2}')
+    if [ -z "$VMID" ]; then
+      echo "ERROR: VM {{ item.hostname }} not found on node {{ proxmox_node }}"
+      exit 1
+    fi
     echo "Resizing disk for {{ item.hostname }} (VMID=$VMID) to {{ item.disk }}G"
-    qm resize $VMID scsi0 {{ item.disk }}G
+    qm resize "$VMID" scsi0 {{ item.disk }}G
   loop: "{{ servers }}"
   loop_control:
     label: "{{ item.hostname }}"
@@ -1326,19 +1326,18 @@ print(match[0])
 - name: Apply Cloud-Init config
   ansible.builtin.shell: |
     set -e
-    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json | \\
-      python3 -c "
-import sys, json
-vms = json.load(sys.stdin)
-match = [v['vmid'] for v in vms if v['name'] == '{{ item.hostname }}']
-if not match:
-    raise SystemExit('VM {{ item.hostname }} not found')
-print(match[0])
-")
+    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json \
+      | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"' \
+      | grep -o '"vmid":[0-9]*' \
+      | awk -F: '{print $2}')
+    if [ -z "$VMID" ]; then
+      echo "ERROR: VM {{ item.hostname }} not found on node {{ proxmox_node }}"
+      exit 1
+    fi
     echo "Applying Cloud-Init to {{ item.hostname }} (VMID=$VMID)"
-    qm set $VMID \\
-      --ipconfig0 "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}" \\
-      --nameserver "{{ dns_primary }}" \\
+    qm set "$VMID" \
+      --ipconfig0 "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}" \
+      --nameserver "{{ dns_primary }}" \
       --cipassword "{{ win_admin_pass }}"
   loop: "{{ servers }}"
   loop_control:
@@ -1362,11 +1361,12 @@ print(match[0])
   ansible.builtin.pause:
     seconds: 90
 """
+import os
 path = "/opt/windows-deployment/ansible/roles/proxmox_provision/tasks/main.yml"
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w") as f:
     f.write(content)
-print("proxmox_provision/tasks/main.yml written")
+print("proxmox_provision/tasks/main.yml written OK")
 PYEOF
 
   # ---------------------------------------------------------------------------
