@@ -1561,8 +1561,8 @@ def log(msg):
     with log_lock:
         print(f'[{time.strftime("%H:%M:%S")}] {msg}', flush=True)
 
-def wait_task(px, upid, label, timeout=900):
-    """Poll task until stopped. Shows elapsed time + ETA from Proxmox pct."""
+def wait_task(px, upid, label, timeout=None):
+    """Poll task until stopped. Shows elapsed time + ETA. timeout=None means wait forever."""
     start   = time.time()
     # Parse node from UPID: UPID:nodename:...
     task_node = upid.split(':')[1] if ':' in upid else node
@@ -1570,7 +1570,7 @@ def wait_task(px, upid, label, timeout=900):
     prev_log  = 0
     while True:
         elapsed = time.time() - start
-        if elapsed > timeout:
+        if timeout is not None and elapsed > timeout:
             raise TimeoutError(f'{label}: timed out after {timeout}s')
         try:
             s = px.nodes(task_node).tasks(upid).status.get()
@@ -1661,7 +1661,7 @@ def clone_vm(srv):
         # Start + confirm running
         upid_start = px.nodes(node).qemu(vmid).status.start.post()
         if upid_start and isinstance(upid_start, str) and upid_start.startswith('UPID'):
-            wait_task(px, upid_start, f'{hostname} start', timeout=120)
+            wait_task(px, upid_start, f"{hostname} start")
         wait_running(px, vmid, hostname)
         log(f'{hostname}: DONE VMID={vmid}')
 
