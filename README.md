@@ -6,7 +6,8 @@ Clone VMs, set static IPs, enable RDP, install Windows role features.
 ## Install
 
 ```bash
-wget https://raw.githubusercontent.com/santiagotoro2023/windows-deployment/main/setup.sh
+wget https://raw.githubusercontent.com/santiagotoro2023/windows-deployment
+cd windows-deployment
 sudo bash setup.sh
 ```
 
