@@ -1172,11 +1172,12 @@ JS_EOF
   # ---------------------------------------------------------------------------
   cat > "${DIR}/ansible/ansible.cfg" << 'EOF'
 [defaults]
-inventory         = inventory/hosts.ini
-roles_path        = roles
-host_key_checking = False
-stdout_callback   = yaml
-timeout           = 60
+inventory           = inventory/hosts.ini
+roles_path          = roles
+collections_paths   = /usr/share/ansible/collections:/root/.ansible/collections
+host_key_checking   = False
+stdout_callback     = yaml
+timeout             = 60
 deprecation_warnings = False
 EOF
 
@@ -1594,13 +1595,18 @@ install() {
   ok "Node.js $(node --version)"
 
   sec "Ansible"
-  # apt gibt Ansible 2.14 — zu alt für community.proxmox/windows Collections.
-  # pip installiert die aktuelle Version (2.17+) die alle Collections unterstützt.
+  # apt gibt Ansible 2.14 — zu alt. pip installiert aktuelle Version (2.17+).
   pip3 install --break-system-packages --upgrade ansible proxmoxer requests pywinrm >>"$LOG" 2>&1
-  # Sicherstellen dass ansible im PATH ist (pip installiert nach ~/.local/bin oder /usr/local/bin)
   export PATH="$PATH:/usr/local/bin:$HOME/.local/bin"
   ansible --version >>"$LOG" 2>&1
-  ansible-galaxy collection install community.general community.windows ansible.windows community.proxmox >>"$LOG" 2>&1
+  # Systemweite Collection-Installation — /root/.ansible wird vom systemd-Service gefunden
+  ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
+    ansible-galaxy collection install \
+      community.general \
+      community.windows \
+      ansible.windows \
+      community.proxmox \
+      -p /usr/share/ansible/collections >>"$LOG" 2>&1
   ok "Ansible + collections + Python deps"
 
   sec "Application"
@@ -1620,6 +1626,7 @@ Type=simple
 WorkingDirectory=${DIR}/backend
 Environment=PORT=${PORT}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=ANSIBLE_COLLECTIONS_PATHS=/usr/share/ansible/collections:/root/.ansible/collections
 ExecStart=/usr/bin/node ${DIR}/backend/server.js
 Restart=on-failure
 RestartSec=5
