@@ -1274,6 +1274,7 @@ content = r"""---
       - proxmoxer
       - requests
     state: present
+    extra_args: "--break-system-packages" 
 
 - name: Clone template to VM
   community.proxmox.proxmox_kvm:
