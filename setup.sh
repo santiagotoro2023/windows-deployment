@@ -1141,7 +1141,7 @@ win_locale=${s.locale||'de-CH'}
   running = true;
   res.json({ success: true });
 
-  const cmd = `cd "${ADIR}" && ansible-playbook site.yml -i inventory/hosts.ini -e "@inventory/_extra_vars.json" 2>&1`;
+  const cmd = `cd "${ADIR}" && $(python3 -c "import shutil; print(shutil.which('ansible-playbook') or '/usr/local/bin/ansible-playbook')") site.yml -i inventory/hosts.ini -e "@inventory/_extra_vars.json" 2>&1`;
   const proc = exec(cmd);
 
   proc.stdout?.on('data', d => { deployLog += d; });
@@ -1174,7 +1174,7 @@ JS_EOF
 [defaults]
 inventory           = inventory/hosts.ini
 roles_path          = roles
-collections_paths   = /usr/share/ansible/collections:/root/.ansible/collections
+collections_paths   = ./collections
 host_key_checking   = False
 stdout_callback     = yaml
 timeout             = 60
@@ -1598,15 +1598,17 @@ install() {
   # apt gibt Ansible 2.14 — zu alt. pip installiert aktuelle Version (2.17+).
   pip3 install --break-system-packages --upgrade ansible proxmoxer requests pywinrm >>"$LOG" 2>&1
   export PATH="$PATH:/usr/local/bin:$HOME/.local/bin"
-  ansible --version >>"$LOG" 2>&1
-  # Systemweite Collection-Installation — /root/.ansible wird vom systemd-Service gefunden
-  ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
-    ansible-galaxy collection install \
-      community.general \
-      community.windows \
-      ansible.windows \
-      community.proxmox \
-      -p /usr/share/ansible/collections >>"$LOG" 2>&1
+  ANSIBLE_BIN=$(python3 -c "import shutil; print(shutil.which('ansible') or '/usr/local/bin/ansible')")
+  inf "Ansible binary: ${ANSIBLE_BIN}"
+  ${ANSIBLE_BIN} --version >>"$LOG" 2>&1
+  # Collections direkt ins Projektverzeichnis installieren — kein PATH/systemd-Problem möglich
+  GALAXY_BIN=$(python3 -c "import shutil; print(shutil.which('ansible-galaxy') or '/usr/local/bin/ansible-galaxy')")
+  ${GALAXY_BIN} collection install \
+    community.general \
+    community.windows \
+    ansible.windows \
+    community.proxmox \
+    -p "${DIR}/ansible/collections" >>"$LOG" 2>&1
   ok "Ansible + collections + Python deps"
 
   sec "Application"
