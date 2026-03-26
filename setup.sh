@@ -1372,202 +1372,143 @@ print("proxmox_provision/tasks/main.yml written OK")
 PYEOF
 
   # ---------------------------------------------------------------------------
-  # ROLE: common
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/common/tasks/main.yml" << 'EOF'
----
-- name: Wait for WinRM to become available
-  ansible.builtin.wait_for:
-    host:    "{{ ansible_host }}"
-    port:    5985
-    timeout: 600
-    delay:   30
-  delegate_to: localhost
+  # Write all Ansible role task files via Python — zero collections needed,
+  # all tasks use only ansible.builtin.raw which is built into Ansible core.
+  # Write /tmp/write_roles.py then execute it — avoids all heredoc/quoting issues
+  cat > /tmp/write_roles.py << 'ROLESCRIPT'
+import os
 
-- name: Set hostname
-  ansible.windows.win_hostname:
-    name: "{{ inventory_hostname_short }}"
-  register: hn
+BASE = "/opt/windows-deployment/ansible/roles"
 
-- name: Set timezone
-  community.windows.win_timezone:
-    timezone: "{{ win_timezone }}"
+ROLES = [
+("common/tasks/main.yml", [
+"---",
+"- name: Wait for WinRM",
+"  ansible.builtin.wait_for:",
+"    host:    '{{ ansible_host }}'",
+"    port:    5985",
+"    timeout: 600",
+"    delay:   30",
+"  delegate_to: localhost",
+"",
+"- name: Hostname, Timezone, DNS, RDP, Firewall",
+"  ansible.builtin.raw: |",
+"    $ErrorActionPreference = 'Stop'",
+"    $needReboot = $false",
+"    $desired = '{{ inventory_hostname_short }}'",
+"    if ($env:COMPUTERNAME -ne $desired) {",
+"      Rename-Computer -NewName $desired -Force",
+"      $needReboot = $true",
+"    }",
+"    Set-TimeZone -Id '{{ win_timezone }}'",
+"    $dns = @('{{ dns_primary }}', '{{ dns_secondary }}')",
+"    Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {",
+"      Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ServerAddresses $dns",
+"    }",
+r"    Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0",
+'    netsh advfirewall firewall set rule group="remote desktop" new enable=Yes',
+"    if ($needReboot) { Restart-Computer -Force }",
+"",
+"- name: Wait for reboot",
+"  ansible.builtin.wait_for:",
+"    host:    '{{ ansible_host }}'",
+"    port:    5985",
+"    timeout: 300",
+"    delay:   30",
+"  delegate_to: localhost",
+]),
 
-- name: Set DNS servers on all active adapters
-  ansible.windows.win_powershell:
-    script: |
-      Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object {
-        Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex `
-          -ServerAddresses @("{{ dns_primary }}", "{{ dns_secondary }}")
-      }
+("dc/tasks/main.yml", [
+"---",
+"- name: Install Domain Controller features",
+"  ansible.builtin.raw: |",
+"    $f = @('AD-Domain-Services','DNS','DHCP','GPMC','RSAT-AD-Tools','RSAT-AD-PowerShell','RSAT-DNS-Server','RSAT-DHCP')",
+"    $r = Install-WindowsFeature -Name $f -IncludeManagementTools",
+"    if ($r.RestartNeeded -eq 'Yes') { Restart-Computer -Force }",
+"",
+"- name: Wait after DC install",
+"  ansible.builtin.wait_for:",
+"    host:    '{{ ansible_host }}'",
+"    port:    5985",
+"    timeout: 600",
+"    delay:   60",
+"  delegate_to: localhost",
+]),
 
-- name: Enable Remote Desktop
-  ansible.windows.win_regedit:
-    path: HKLM:\System\CurrentControlSet\Control\Terminal Server
-    name: fDenyTSConnections
-    data: 0
-    type: dword
+("fileserver/tasks/main.yml", [
+"---",
+"- name: Install File Server features",
+"  ansible.builtin.raw: |",
+"    Install-WindowsFeature -Name FS-FileServer,FS-DFS-Namespace,FS-DFS-Replication,FS-Resource-Manager,RSAT-DFS-Mgmt-Con -IncludeManagementTools",
+]),
 
-- name: Allow RDP through Windows Firewall
-  ansible.windows.win_firewall_rule:
-    name:      "Remote Desktop - User Mode (TCP-In)"
-    localport: 3389
-    action:    allow
-    direction: in
-    protocol:  tcp
-    state:     present
-    enabled:   yes
+("backupserver/tasks/main.yml", [
+"---",
+"- name: Backup server ready",
+'  ansible.builtin.raw: echo "Backup server — install backup software manually"',
+]),
 
-- name: Reboot if hostname changed
-  ansible.windows.win_reboot:
-    reboot_timeout: 300
-  when: hn.reboot_required
-EOF
+("rds_broker/tasks/main.yml", [
+"---",
+"- name: Install RDS Broker features",
+"  ansible.builtin.raw: |",
+"    $r = Install-WindowsFeature -Name RDS-Connection-Broker,RDS-Licensing,RDS-Web-Access,RSAT-RDS-Tools -IncludeManagementTools",
+"    if ($r.RestartNeeded -eq 'Yes') { Restart-Computer -Force }",
+"",
+"- name: Wait after RDS Broker install",
+"  ansible.builtin.wait_for:",
+"    host:    '{{ ansible_host }}'",
+"    port:    5985",
+"    timeout: 600",
+"    delay:   60",
+"  delegate_to: localhost",
+]),
 
-  # ---------------------------------------------------------------------------
-  # ROLE: dc
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/dc/tasks/main.yml" << 'EOF'
----
-- name: Install Domain Controller features
-  ansible.windows.win_feature:
-    name:
-      - AD-Domain-Services
-      - DNS
-      - DHCP
-      - GPMC
-      - RSAT-AD-Tools
-      - RSAT-AD-PowerShell
-      - RSAT-DNS-Server
-      - RSAT-DHCP
-    include_management_tools: yes
-    state: present
-  register: dc_feature
+("rds_sessionhost/tasks/main.yml", [
+"---",
+"- name: Install RDS Session Host features",
+"  ansible.builtin.raw: |",
+"    $r = Install-WindowsFeature -Name RDS-RD-Server,Desktop-Experience -IncludeManagementTools",
+"    if ($r.RestartNeeded -eq 'Yes') { Restart-Computer -Force }",
+"",
+"- name: Wait after Session Host install",
+"  ansible.builtin.wait_for:",
+"    host:    '{{ ansible_host }}'",
+"    port:    5985",
+"    timeout: 600",
+"    delay:   90",
+"  delegate_to: localhost",
+]),
 
-- name: Reboot if required
-  ansible.windows.win_reboot:
-    reboot_timeout: 300
-  when: dc_feature.reboot_required
-EOF
+("printserver/tasks/main.yml", [
+"---",
+"- name: Install Print Server",
+"  ansible.builtin.raw: |",
+"    Install-WindowsFeature -Name Print-Server,RSAT-Print-Services -IncludeManagementTools",
+"    Set-Service -Name Spooler -StartupType Automatic",
+"    Start-Service -Name Spooler -ErrorAction SilentlyContinue",
+'    netsh advfirewall firewall set rule group="File and Printer Sharing" new enable=Yes',
+]),
 
-  # ---------------------------------------------------------------------------
-  # ROLE: fileserver
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/fileserver/tasks/main.yml" << 'EOF'
----
-- name: Install File Server features
-  ansible.windows.win_feature:
-    name:
-      - FS-FileServer
-      - FS-DFS-Namespace
-      - FS-DFS-Replication
-      - FS-Resource-Manager
-      - RSAT-DFS-Mgmt-Con
-    include_management_tools: yes
-    state: present
-EOF
+("mgmt/tasks/main.yml", [
+"---",
+"- name: Install full RSAT suite",
+"  ansible.builtin.raw: |",
+"    $f = @('RSAT','RSAT-AD-Tools','RSAT-AD-PowerShell','RSAT-DNS-Server','RSAT-DHCP','RSAT-DFS-Mgmt-Con','RSAT-Print-Services','RSAT-RDS-Tools','GPMC')",
+"    Install-WindowsFeature -Name $f -IncludeManagementTools",
+]),
+]
 
-  # ---------------------------------------------------------------------------
-  # ROLE: backupserver
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/backupserver/tasks/main.yml" << 'EOF'
----
-- name: Backup server ready
-  ansible.builtin.debug:
-    msg: "{{ inventory_hostname }} ready — install Veeam B&R or other backup software manually"
-EOF
+for rel_path, content_lines in ROLES:
+    full_path = os.path.join(BASE, rel_path)
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    with open(full_path, "w") as fh:
+        fh.write("\n".join(content_lines) + "\n")
+    print("  wrote: " + rel_path)
 
-  # ---------------------------------------------------------------------------
-  # ROLE: rds_broker
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/rds_broker/tasks/main.yml" << 'EOF'
----
-- name: Install RDS Broker features
-  ansible.windows.win_feature:
-    name:
-      - RDS-Connection-Broker
-      - RDS-Licensing
-      - RDS-Web-Access
-      - RSAT-RDS-Tools
-    include_management_tools: yes
-    state: present
-  register: broker_feature
-
-- name: Reboot after RDS Broker install
-  ansible.windows.win_reboot:
-    reboot_timeout: 300
-  when: broker_feature.reboot_required
-EOF
-
-  # ---------------------------------------------------------------------------
-  # ROLE: rds_sessionhost
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/rds_sessionhost/tasks/main.yml" << 'EOF'
----
-- name: Install RDS Session Host features
-  ansible.windows.win_feature:
-    name:
-      - RDS-RD-Server
-      - Desktop-Experience
-    include_management_tools: yes
-    state: present
-  register: sh_feature
-
-- name: Reboot after Session Host install (required by Windows)
-  ansible.windows.win_reboot:
-    reboot_timeout: 600
-  when: sh_feature.reboot_required
-EOF
-
-  # ---------------------------------------------------------------------------
-  # ROLE: printserver
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/printserver/tasks/main.yml" << 'EOF'
----
-- name: Install Print Server features
-  ansible.windows.win_feature:
-    name:
-      - Print-Server
-      - RSAT-Print-Services
-    include_management_tools: yes
-    state: present
-
-- name: Start and enable Print Spooler
-  ansible.windows.win_service:
-    name:       Spooler
-    start_mode: auto
-    state:      started
-
-- name: Allow printing through firewall
-  ansible.windows.win_firewall_rule:
-    name:      "File and Printer Sharing"
-    group:     "File and Printer Sharing"
-    action:    allow
-    direction: in
-    state:     present
-    enabled:   yes
-EOF
-
-  # ---------------------------------------------------------------------------
-  # ROLE: mgmt
-  # ---------------------------------------------------------------------------
-  cat > "${DIR}/ansible/roles/mgmt/tasks/main.yml" << 'EOF'
----
-- name: Install full RSAT management suite
-  ansible.windows.win_feature:
-    name:
-      - RSAT
-      - RSAT-AD-Tools
-      - RSAT-AD-PowerShell
-      - RSAT-DNS-Server
-      - RSAT-DHCP
-      - RSAT-DFS-Mgmt-Con
-      - RSAT-Print-Services
-      - RSAT-RDS-Tools
-      - GPMC
-    include_management_tools: yes
-    state: present
-EOF
+print("All role files written OK")
+ROLESCRIPT
+  python3 /tmp/write_roles.py
 
   ok "All files written"
 }
