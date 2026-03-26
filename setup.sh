@@ -1176,7 +1176,8 @@ inventory           = inventory/hosts.ini
 roles_path          = roles
 collections_paths   = ./collections
 host_key_checking   = False
-stdout_callback     = yaml
+stdout_callback     = default
+result_format       = yaml
 timeout             = 60
 deprecation_warnings = False
 EOF
