@@ -1292,78 +1292,37 @@ content = r"""---
     state: present
     extra_args: "--break-system-packages"
 
-- name: Parse API user and token name from full token ID
-  ansible.builtin.set_fact:
-    pve_api_user:   "{{ proxmox_token_id.split('!')[0] }}"
-    pve_token_name: "{{ proxmox_token_id.split('!')[1] if '!' in proxmox_token_id else proxmox_token_id }}"
+# Use a local Python script to clone via proxmoxer directly.
+# community.proxmox.proxmox_kvm clone is unreliable — it searches by name
+# but does not find templates on all Proxmox versions.
+- name: Clone all VMs via proxmoxer Python script
+  ansible.builtin.script: "{{ playbook_dir }}/pve_clone.py"
+  args:
+    executable: python3
+  environment:
+    PVE_HOST:          "{{ proxmox_host }}"
+    PVE_TOKEN_ID:      "{{ proxmox_token_id }}"
+    PVE_TOKEN_SECRET:  "{{ proxmox_token_secret }}"
+    PVE_NODE:          "{{ proxmox_node }}"
+    PVE_TEMPLATE_NAME: "{{ proxmox_template_name }}"
+    PVE_STORAGE:       "{{ proxmox_storage }}"
+    PVE_SERVERS:       "{{ servers | to_json }}"
+    NET_PREFIX_LEN:    "{{ network_prefix_length }}"
+    NET_GATEWAY:       "{{ network_gateway }}"
+    DNS_PRIMARY:       "{{ dns_primary }}"
+    WIN_PASS:          "{{ win_admin_pass }}"
+  delegate_to: localhost
 
-# community.proxmox.proxmox_kvm clone requires the template VM *name* (not VMID).
-# We now store templateName in the host config, so this works via API token only.
-- name: Clone template to VM
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    clone:            "{{ proxmox_template_name }}"
-    name:             "{{ item.hostname }}"
-    full:             true
-    storage:          "{{ proxmox_storage }}"
-    timeout:          300
-    state:            present
+- name: Wait for WinRM on all VMs (polls every 10s, no hardcoded sleep)
+  ansible.builtin.wait_for:
+    host:    "{{ item.ip }}"
+    port:    5985
+    timeout: 900
+    delay:   10
   loop: "{{ servers }}"
   loop_control:
     label: "{{ item.hostname }}"
-
-- name: Configure CPU and RAM
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    name:             "{{ item.hostname }}"
-    cores:            "{{ item.cpus | int }}"
-    memory:           "{{ item.ram | int }}"
-    update:           true
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-
-- name: Apply Cloud-Init config via API
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    name:             "{{ item.hostname }}"
-    ipconfig:
-      ipconfig0: "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}"
-    nameservers:      "{{ dns_primary }}"
-    cipassword:       "{{ win_admin_pass }}"
-    update:           true
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-
-- name: Start VMs
-  community.proxmox.proxmox_kvm:
-    api_host:         "{{ proxmox_host }}"
-    api_user:         "{{ pve_api_user }}"
-    api_token_id:     "{{ pve_token_name }}"
-    api_token_secret: "{{ proxmox_token_secret }}"
-    node:             "{{ proxmox_node }}"
-    name:             "{{ item.hostname }}"
-    state:            started
-  loop: "{{ servers }}"
-  loop_control:
-    label: "{{ item.hostname }}"
-
-- name: Wait for VMs to boot (90s)
-  ansible.builtin.pause:
-    seconds: 90
+  delegate_to: localhost
 """
 import os
 path = "/opt/windows-deployment/ansible/roles/proxmox_provision/tasks/main.yml"
@@ -1511,6 +1470,176 @@ for rel_path, content_lines in ROLES:
 print("All role files written OK")
 ROLESCRIPT
   python3 /tmp/write_roles.py
+
+  # ---------------------------------------------------------------------------
+  # pve_clone.py — called by proxmox_provision role
+  # ---------------------------------------------------------------------------
+  cat > "${DIR}/ansible/pve_clone.py" << 'PYCLONE'
+#!/usr/bin/env python3
+import os, sys, json, time, threading
+from proxmoxer import ProxmoxAPI
+
+host          = os.environ['PVE_HOST']
+token_id      = os.environ['PVE_TOKEN_ID']
+token_secret  = os.environ['PVE_TOKEN_SECRET']
+node          = os.environ['PVE_NODE']
+template_name = os.environ['PVE_TEMPLATE_NAME']
+storage       = os.environ['PVE_STORAGE']
+servers       = json.loads(os.environ['PVE_SERVERS'])
+prefix_len    = os.environ['NET_PREFIX_LEN']
+gateway       = os.environ['NET_GATEWAY']
+dns           = os.environ['DNS_PRIMARY']
+win_pass      = os.environ['WIN_PASS']
+
+if '!' in token_id:
+    api_user, token_name = token_id.split('!', 1)
+else:
+    api_user, token_name = 'root@pam', token_id
+
+log_lock  = threading.Lock()
+vmid_lock = threading.Lock()
+errors    = []
+
+def log(msg):
+    with log_lock:
+        print(f'[{time.strftime("%H:%M:%S")}] {msg}', flush=True)
+
+def wait_task(px, upid, label, timeout=900):
+    """Poll task until stopped. Shows elapsed time + ETA from Proxmox pct."""
+    start   = time.time()
+    # Parse node from UPID: UPID:nodename:...
+    task_node = upid.split(':')[1] if ':' in upid else node
+    prev_pct  = -1
+    prev_log  = 0
+    while True:
+        elapsed = time.time() - start
+        if elapsed > timeout:
+            raise TimeoutError(f'{label}: timed out after {timeout}s')
+        try:
+            s = px.nodes(task_node).tasks(upid).status.get()
+        except Exception as e:
+            log(f'  {label}: poll error ({e}), retrying...')
+            time.sleep(5)
+            continue
+        if s['status'] == 'stopped':
+            exitcode = s.get('exitstatus', '')
+            if exitcode != 'OK':
+                raise RuntimeError(f'{label} failed: {exitcode}')
+            log(f'  {label}: finished in {elapsed:.0f}s')
+            return elapsed
+        # Progress reporting
+        pct = s.get('pct', 0) or 0
+        now = time.time()
+        if pct > 0 and pct != prev_pct:
+            eta = (elapsed / pct) * (100 - pct)
+            log(f'  {label}: {pct:.0f}%  elapsed={elapsed:.0f}s  ETA~{eta:.0f}s')
+            prev_pct = pct
+            prev_log = now
+        elif pct == 0 and now - prev_log >= 15:
+            log(f'  {label}: running... {elapsed:.0f}s elapsed (no progress info)')
+            prev_log = now
+        time.sleep(2)
+
+def wait_running(px, vmid, label, timeout=300):
+    """Poll VM status until running. No hardcoded sleep."""
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            st = px.nodes(node).qemu(vmid).status.current.get()
+            status = st.get('qmpstatus') or st.get('status', '')
+            if status == 'running':
+                log(f'  {label}: running (boot confirmed in {time.time()-start:.0f}s)')
+                return
+        except Exception:
+            pass
+        time.sleep(3)
+    log(f'  {label}: WARNING - did not confirm running within {timeout}s')
+
+def clone_vm(srv):
+    hostname = srv['hostname']
+    ip, cpus, ram, disk_gb = srv['ip'], srv['cpus'], srv['ram'], srv['disk']
+    try:
+        current = px.nodes(node).qemu.get()
+        existing = next((v for v in current if v['name'] == hostname), None)
+        if existing:
+            vmid = existing['vmid']
+            log(f'{hostname}: already exists VMID={vmid}, skipping clone')
+        else:
+            with vmid_lock:
+                vmid = int(px.cluster.nextid.get())
+                log(f'{hostname}: cloning template {template_vmid} -> VMID {vmid}')
+                upid = px.nodes(node).qemu(template_vmid).clone.post(
+                    newid=vmid, name=hostname, full=1, storage=storage)
+            wait_task(px, upid, f'{hostname} clone')
+
+        # Resize disk first (while VM is stopped)
+        try:
+            current_size = next(
+                (v.get('size', 0) for k, v in
+                 px.nodes(node).qemu(vmid).config.get().items()
+                 if k == 'scsi0'), 0)
+        except Exception:
+            current_size = 0
+        # qemu disk config, resize via API
+        try:
+            upid_resize = px.nodes(node).qemu(vmid).resize.put(
+                disk='scsi0', size=f'{disk_gb}G')
+            if upid_resize and isinstance(upid_resize, str) and upid_resize.startswith('UPID'):
+                wait_task(px, upid_resize, f'{hostname} resize')
+            log(f'  {hostname}: disk set to {disk_gb}G')
+        except Exception as e:
+            log(f'  {hostname}: disk resize skipped ({e})')
+
+        # CPU + RAM
+        px.nodes(node).qemu(vmid).config.post(cores=int(cpus), memory=int(ram))
+
+        # Cloud-Init
+        px.nodes(node).qemu(vmid).config.post(
+            ipconfig0=f'ip={ip}/{prefix_len},gw={gateway}',
+            nameserver=dns,
+            cipassword=win_pass,
+        )
+        log(f'  {hostname}: configured cores={cpus} ram={ram}MB ip={ip}')
+
+        # Start + confirm running
+        upid_start = px.nodes(node).qemu(vmid).status.start.post()
+        if upid_start and isinstance(upid_start, str) and upid_start.startswith('UPID'):
+            wait_task(px, upid_start, f'{hostname} start', timeout=120)
+        wait_running(px, vmid, hostname)
+        log(f'{hostname}: DONE VMID={vmid}')
+
+    except Exception as e:
+        log(f'{hostname}: ERROR - {e}')
+        with log_lock:
+            errors.append((hostname, str(e)))
+
+log(f'Connecting to {host} as {api_user} token={token_name}')
+px = ProxmoxAPI(host, user=api_user, token_name=token_name,
+                token_value=token_secret, verify_ssl=False)
+
+all_vms = px.nodes(node).qemu.get()
+tmpl    = next((v for v in all_vms if v['name'] == template_name), None)
+if not tmpl:
+    log(f"ERROR: Template '{template_name}' not found on node {node}.")
+    log(f'Available: {sorted(v["name"] for v in all_vms)}')
+    sys.exit(1)
+template_vmid = tmpl['vmid']
+log(f"Template '{template_name}' = VMID {template_vmid}")
+log(f'Starting parallel clone of {len(servers)} VM(s)...')
+
+t0      = time.time()
+threads = [threading.Thread(target=clone_vm, args=(s,), daemon=True) for s in servers]
+for t in threads: t.start()
+for t in threads: t.join()
+
+log(f'All threads done in {time.time()-t0:.0f}s')
+if errors:
+    log('ERRORS:')
+    for h, e in errors:
+        log(f'  {h}: {e}')
+    sys.exit(1)
+log('All VMs cloned, configured and started OK')
+PYCLONE
 
   ok "All files written"
 }
