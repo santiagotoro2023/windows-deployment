@@ -1274,13 +1274,18 @@ content = r"""---
       - proxmoxer
       - requests
     state: present
-    extra_args: "--break-system-packages" 
+    extra_args: "--break-system-packages"
+
+- name: Parse API user and token name from full token ID
+  ansible.builtin.set_fact:
+    pve_api_user:   "{{ proxmox_token_id.split('!')[0] }}"
+    pve_token_name: "{{ proxmox_token_id.split('!')[1] if '!' in proxmox_token_id else proxmox_token_id }}"
 
 - name: Clone template to VM
   community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
-    api_user:         "root@pam"
-    api_token_id:     "{{ proxmox_token_id }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
     api_token_secret: "{{ proxmox_token_secret }}"
     node:             "{{ proxmox_node }}"
     clone:            "{{ proxmox_template_vmid }}"
@@ -1296,8 +1301,8 @@ content = r"""---
 - name: Configure CPU and RAM
   community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
-    api_user:         "root@pam"
-    api_token_id:     "{{ proxmox_token_id }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
     api_token_secret: "{{ proxmox_token_secret }}"
     node:             "{{ proxmox_node }}"
     name:             "{{ item.hostname }}"
@@ -1311,10 +1316,7 @@ content = r"""---
 - name: Resize disk
   ansible.builtin.shell: |
     set -e
-    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json \
-      | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"' \
-      | grep -o '"vmid":[0-9]*' \
-      | awk -F: '{print $2}')
+    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json       | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"'       | grep -o '"vmid":[0-9]*'       | awk -F: '{print $2}')
     if [ -z "$VMID" ]; then
       echo "ERROR: VM {{ item.hostname }} not found on node {{ proxmox_node }}"
       exit 1
@@ -1330,19 +1332,13 @@ content = r"""---
 - name: Apply Cloud-Init config
   ansible.builtin.shell: |
     set -e
-    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json \
-      | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"' \
-      | grep -o '"vmid":[0-9]*' \
-      | awk -F: '{print $2}')
+    VMID=$(pvesh get /nodes/{{ proxmox_node }}/qemu --output-format json       | grep -o '"vmid":[0-9]*,"name":"{{ item.hostname }}"'       | grep -o '"vmid":[0-9]*'       | awk -F: '{print $2}')
     if [ -z "$VMID" ]; then
       echo "ERROR: VM {{ item.hostname }} not found on node {{ proxmox_node }}"
       exit 1
     fi
     echo "Applying Cloud-Init to {{ item.hostname }} (VMID=$VMID)"
-    qm set "$VMID" \
-      --ipconfig0 "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}" \
-      --nameserver "{{ dns_primary }}" \
-      --cipassword "{{ win_admin_pass }}"
+    qm set "$VMID"       --ipconfig0 "ip={{ item.ip }}/{{ network_prefix_length }},gw={{ network_gateway }}"       --nameserver "{{ dns_primary }}"       --cipassword "{{ win_admin_pass }}"
   loop: "{{ servers }}"
   loop_control:
     label: "{{ item.hostname }}"
@@ -1351,8 +1347,8 @@ content = r"""---
 - name: Start VMs
   community.proxmox.proxmox_kvm:
     api_host:         "{{ proxmox_host }}"
-    api_user:         "root@pam"
-    api_token_id:     "{{ proxmox_token_id }}"
+    api_user:         "{{ pve_api_user }}"
+    api_token_id:     "{{ pve_token_name }}"
     api_token_secret: "{{ proxmox_token_secret }}"
     node:             "{{ proxmox_node }}"
     name:             "{{ item.hostname }}"
