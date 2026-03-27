@@ -1492,55 +1492,49 @@ import os
 
 BASE = "/opt/windows-deployment/ansible/roles"
 
-ROLES = [
-# common role written via python3 to avoid YAML/Jinja2 quote conflicts
-# The WinRM winrm set commands use double-quotes inside — impossible in ROLESCRIPT lists.
-
-]  # close ROLES list temporarily — we write common separately below
-
-import os
-BASE = "/opt/windows-deployment/ansible/roles"
-
-common_yaml = """---
-- name: Wait for WinRM
-  ansible.builtin.wait_for:
-    host:    "{{ ansible_host }}"
-    port:    5985
-    timeout: 600
-    delay:   30
-  delegate_to: localhost
-
-- name: Configure WinRM, hostname, timezone, DNS, RDP
-  ansible.builtin.raw: |
-    $ErrorActionPreference = "Stop"
-    $needReboot = $false
-    winrm quickconfig -q -force 2>$null
-    winrm set winrm/config/service "@{AllowUnencrypted=\"true\"}" 2>$null
-    winrm set winrm/config/service/auth "@{Basic=\"true\"}" 2>$null
-    Set-Service WinRM -StartupType Automatic
-    Start-Service WinRM -ErrorAction SilentlyContinue
-    $desired = "{{ inventory_hostname_short }}"
-    if ($env:COMPUTERNAME -ne $desired) {
-      Rename-Computer -NewName $desired -Force
-      $needReboot = $true
-    }
-    Set-TimeZone -Id "{{ win_timezone }}"
-    $dns = @("{{ dns_primary }}", "{{ dns_secondary }}")
-    Get-NetAdapter | Where-Object Status -eq "Up" | ForEach-Object {
-      Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ServerAddresses $dns
-    }
-    Set-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" fDenyTSConnections 0
-    netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-    if ($needReboot) { Restart-Computer -Force }
-
-- name: Wait for reboot
-  ansible.builtin.wait_for:
-    host:    "{{ ansible_host }}"
-    port:    5985
-    timeout: 300
-    delay:   30
-  delegate_to: localhost
-"""
+common_yaml = (
+    "---\n"
+    "- name: Wait for WinRM\n"
+    "  ansible.builtin.wait_for:\n"
+    "    host:    '{{ ansible_host }}'\n"
+    "    port:    5985\n"
+    "    timeout: 600\n"
+    "    delay:   30\n"
+    "  delegate_to: localhost\n"
+    "\n"
+    "- name: Configure WinRM, hostname, timezone, DNS, RDP\n"
+    "  ansible.builtin.raw: |\n"
+    "    $ErrorActionPreference = 'Stop'\n"
+    "    $needReboot = $false\n"
+    "    winrm quickconfig -q -force 2>$null\n"
+    "    $cfg = '@{AllowUnencrypted=' + [char]34 + 'true' + [char]34 + '}'\n"
+    "    winrm set winrm/config/service $cfg 2>$null\n"
+    "    $auth = '@{Basic=' + [char]34 + 'true' + [char]34 + '}'\n"
+    "    winrm set winrm/config/service/auth $auth 2>$null\n"
+    "    Set-Service WinRM -StartupType Automatic\n"
+    "    Start-Service WinRM -ErrorAction SilentlyContinue\n"
+    "    $desired = '{{ inventory_hostname_short }}'\n"
+    "    if ($env:COMPUTERNAME -ne $desired) {\n"
+    "      Rename-Computer -NewName $desired -Force\n"
+    "      $needReboot = $true\n"
+    "    }\n"
+    "    Set-TimeZone -Id '{{ win_timezone }}'\n"
+    "    $dns = @('{{ dns_primary }}', '{{ dns_secondary }}')\n"
+    "    Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {\n"
+    "      Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ServerAddresses $dns\n"
+    "    }\n"
+    "    Set-ItemProperty 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server' fDenyTSConnections 0\n"
+    "    netsh advfirewall firewall set rule group='remote desktop' new enable=Yes\n"
+    "    if ($needReboot) { Restart-Computer -Force }\n"
+    "\n"
+    "- name: Wait for reboot\n"
+    "  ansible.builtin.wait_for:\n"
+    "    host:    '{{ ansible_host }}'\n"
+    "    port:    5985\n"
+    "    timeout: 300\n"
+    "    delay:   30\n"
+    "  delegate_to: localhost\n"
+)
 
 p = os.path.join(BASE, "common/tasks/main.yml")
 os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -1549,6 +1543,7 @@ with open(p, "w") as fh:
 print("  wrote: common/tasks/main.yml")
 
 ROLES = [
+("dc/tasks/main.yml", [
 "---",
 "- name: Install Domain Controller features",
 "  ansible.builtin.raw: |",
@@ -1564,20 +1559,18 @@ ROLES = [
 "    delay:   60",
 "  delegate_to: localhost",
 ]),
-
 ("fileserver/tasks/main.yml", [
 "---",
 "- name: Install File Server features",
 "  ansible.builtin.raw: |",
 "    Install-WindowsFeature -Name FS-FileServer,FS-DFS-Namespace,FS-DFS-Replication,FS-Resource-Manager,RSAT-DFS-Mgmt-Con -IncludeManagementTools",
 ]),
-
 ("backupserver/tasks/main.yml", [
 "---",
 "- name: Backup server ready",
-'  ansible.builtin.raw: echo "Backup server — install backup software manually"',
+"  ansible.builtin.debug:",
+"    msg: 'Backup server ready - install backup software manually'",
 ]),
-
 ("rds_broker/tasks/main.yml", [
 "---",
 "- name: Install RDS Broker features",
@@ -1593,7 +1586,6 @@ ROLES = [
 "    delay:   60",
 "  delegate_to: localhost",
 ]),
-
 ("rds_sessionhost/tasks/main.yml", [
 "---",
 "- name: Install RDS Session Host features",
@@ -1609,7 +1601,6 @@ ROLES = [
 "    delay:   90",
 "  delegate_to: localhost",
 ]),
-
 ("printserver/tasks/main.yml", [
 "---",
 "- name: Install Print Server",
@@ -1617,9 +1608,8 @@ ROLES = [
 "    Install-WindowsFeature -Name Print-Server,RSAT-Print-Services -IncludeManagementTools",
 "    Set-Service -Name Spooler -StartupType Automatic",
 "    Start-Service -Name Spooler -ErrorAction SilentlyContinue",
-'    netsh advfirewall firewall set rule group="File and Printer Sharing" new enable=Yes',
+"    netsh advfirewall firewall set rule group='File and Printer Sharing' new enable=Yes",
 ]),
-
 ("mgmt/tasks/main.yml", [
 "---",
 "- name: Install full RSAT suite",
