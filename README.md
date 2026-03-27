@@ -1,12 +1,10 @@
-# windows-deployment
+# ⚡ windows-deployment
 
-Automated Windows Server 2025 deployment on Proxmox VE — with a full management web UI.
-
-Clone VMs, configure static IPs, enable RDP, install Windows roles, manage multiple Proxmox environments organised by customer or location — all from one place.
+> Automated Windows Server 2025 deployment on Proxmox VE — clone VMs, configure IPs, install roles, manage infrastructure — all from one web UI.
 
 ---
 
-## Quick start
+## 🚀 Quick start
 
 ```bash
 git clone https://github.com/santiagotoro2023/windows-deployment
@@ -14,98 +12,60 @@ cd windows-deployment
 sudo bash setup.sh
 ```
 
-Opens at `http://<server-ip>:3000`
+Opens at **`http://<server-ip>:3000`**
 
-**Uninstall:**
 ```bash
+# Uninstall
 sudo bash setup.sh uninstall
 ```
 
 ---
 
-## Requirements
+## 📋 Requirements
 
-| Component | Notes |
+| | |
 |---|---|
-| Proxmox VE | 8.x |
-| Deployment host OS | Debian 11/12 or Ubuntu 22.04/24.04 |
-| Windows Server template | Built from scratch — see below |
-
-The deployment host can be any Linux VM — it does not need to run on the Proxmox host itself.
+| **Proxmox VE** | 8.x |
+| **Deployment host** | Debian 11/12 or Ubuntu 22.04/24.04 (any Linux VM in the same network) |
+| **Windows template** | Built once — see below |
 
 ---
 
-## Building the Windows Server 2025 template
+## 🖼️ Building the Windows Server 2025 template
 
-> This is the most important step. Every VM is cloned from this template. If Cloudbase-Init is not set up correctly here, Cloud-Init settings will not apply after deployment.
+> **Do this once.** All deployed VMs are full clones of this template. Getting Cloudbase-Init right here is the key to everything working automatically.
 
-### 1 — Download ISOs on the Proxmox host
+### What you need
+- A Windows Server 2025 ISO (evaluation version is fine — 180 days free)
+- The VirtIO drivers ISO (from the Fedora project)
+- Both uploaded to your Proxmox ISO storage
 
-```bash
-cd /var/lib/vz/template/iso/
+### VM setup pointers
+- Use machine type **q35**, firmware **OVMF (UEFI)**
+- Add a **VirtIO SCSI** disk (60 GB is enough for a template)
+- Attach both ISOs as CDROMs
+- Add a **Cloud-Init drive** (IDE) — this is what carries IP/password/hostname to the VM
+- Enable the QEMU Guest Agent
 
-# Windows Server 2025 Evaluation (180 days, free)
-wget "https://go.microsoft.com/fwlink/?linkid=2293312" -O WinServer2025.iso
+### Windows installation
+- Choose **Standard (Desktop Experience)** during setup
+- Load the VirtIO storage driver when prompted (`vioscsi\w11\amd64` on the driver ISO)
 
-# VirtIO drivers — required for disk and network
-wget https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
-```
+### After installation — key steps
 
-### 2 — Create the VM
+1. **Install the VirtIO Guest Agent** from the driver ISO
+2. **Pre-configure WinRM** so Ansible can connect after deployment:
+   ```powershell
+   winrm quickconfig -q
+   winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+   winrm set winrm/config/service/auth '@{Basic="true"}'
+   netsh advfirewall firewall add rule name="WinRM HTTP" dir=in action=allow protocol=TCP localport=5985
+   Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+   ```
+3. **Install Windows Updates** (reboot as needed)
+4. **Install Cloudbase-Init** — the Windows equivalent of cloud-init. Download the latest MSI from the [Cloudbase-Init releases page](https://github.com/cloudbase/cloudbase-init/releases).
 
-```bash
-qm create 9000 \
-  --name "win2025-template" \
-  --memory 4096 --cores 2 --cpu host \
-  --machine q35 --bios ovmf \
-  --efidisk0 local-lvm:0,efitype=4m,pre-enrolkeys=1 \
-  --scsihw virtio-scsi-pci \
-  --scsi0 local-lvm:60,cache=writeback,discard=on \
-  --ide2 local:iso/WinServer2025.iso,media=cdrom \
-  --ide3 local:iso/virtio-win.iso,media=cdrom \
-  --net0 virtio,bridge=vmbr0 \
-  --ostype win11 --tablet 0 \
-  --agent enabled=1 --vga qxl --serial0 socket \
-  --boot order=ide2
-
-# Add Cloud-Init drive — required for IP/password/hostname injection
-qm set 9000 --ide1 local-lvm:cloudinit
-```
-
-### 3 — Install Windows
-
-1. Start the VM, open the Proxmox console
-2. Choose **Windows Server 2025 Standard (Desktop Experience)**
-3. When prompted for drivers: **Load driver** → VirtIO CD → `vioscsi\w11\amd64`
-4. Complete installation and set an Administrator password
-
-### 4 — Post-install configuration (PowerShell as Administrator)
-
-```powershell
-# VirtIO Guest Agent (from D:\ = virtio-win ISO)
-Start-Process "D:\virtio-win-gt-x64.msi" -ArgumentList "/qn" -Wait
-
-# Pre-configure WinRM so Ansible can connect after deployment
-winrm quickconfig -q
-winrm set winrm/config/service '@{AllowUnencrypted="true"}'
-winrm set winrm/config/service/auth '@{Basic="true"}'
-netsh advfirewall firewall add rule name="WinRM HTTP" `
-  dir=in action=allow protocol=TCP localport=5985
-
-# Disable firewall (configure properly via GPO later)
-Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
-
-# Install Windows Updates
-Install-Module PSWindowsUpdate -Force
-Get-WindowsUpdate -Install -AcceptAll -AutoReboot
-
-# Install Cloudbase-Init
-$url = "https://github.com/cloudbase/cloudbase-init/releases/latest/download/CloudbaseInitSetup_x64.msi"
-Invoke-WebRequest $url -OutFile "C:\CloudbaseInit.msi"
-Start-Process msiexec -ArgumentList "/i C:\CloudbaseInit.msi /qn" -Wait
-```
-
-### 5 — Configure Cloudbase-Init
+### Cloudbase-Init configuration
 
 Edit `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\conf\cloudbase-init.conf`:
 
@@ -130,9 +90,9 @@ allow_reboot=true
 stop_service_on_exit=false
 ```
 
-### 6 — Unattend.xml (skip OOBE on first boot)
+### Unattend.xml — skip the OOBE setup wizard
 
-Create `C:\Windows\System32\Sysprep\unattend.xml`:
+Create `C:\Windows\System32\Sysprep\unattend.xml` — without this, Windows will show the "Hello" setup wizard on every first boot instead of letting Cloudbase-Init take over:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -157,186 +117,186 @@ Create `C:\Windows\System32\Sysprep\unattend.xml`:
 </unattend>
 ```
 
-### 7 — Sysprep and convert to template
+### Sysprep and convert to template
 
 ```powershell
-# Clean up
-Remove-Item C:\CloudbaseInit.msi -Force -ErrorAction SilentlyContinue
 Clear-EventLog -LogName Application, Security, System
-
-# Sysprep — VM shuts down automatically
 C:\Windows\System32\Sysprep\sysprep.exe /oobe /generalize /shutdown `
   /unattend:C:\Windows\System32\Sysprep\unattend.xml
 ```
 
-Then on the Proxmox host:
-
+Then on the Proxmox host, convert the VM to a template:
 ```bash
-qm template 9000
+qm template <vmid>
 ```
 
-> Windows allows a maximum of 8 Sysprep runs per installation. If you reach this limit, rebuild the template from scratch.
+> ⚠️ Windows allows a maximum of **8 Sysprep runs** per installation. After that you need to rebuild from scratch.
 
 ---
 
-## Authentication
+## 🔐 Users & access
 
-The tool uses **Linux PAM** — users sign in with their system credentials. No separate password database needed.
+Users are managed entirely within the application — no Linux system accounts needed.
 
 ### Roles
 
-| Role | Permissions |
+| Role | What they can do |
 |---|---|
-| `admin` | Full access — users, organisations, hosts, settings, templates, deploy |
-| `deploy` | Add/edit VMs, run deploys, manage own templates |
-| `readonly` | View everything — no changes |
+| 🔴 `admin` | Everything — users, organisations, hosts, settings, templates, deploy |
+| 🟡 `deploy` | Add/edit VMs, run deploys, manage own templates |
+| 🔵 `readonly` | View VMs, hosts and logs — no changes |
 
-### Adding users
+### First login
 
-The user must exist as a Linux system user:
+On first startup a default admin account is created:
 
-```bash
-useradd -m -s /bin/bash alice
-passwd alice
-```
+| Username | Password |
+|---|---|
+| `admin` | `admin` |
 
-Then add them in **Admin → Users → + Add User** and assign a role.
+**Change this immediately** in **Admin → Users**.
 
-The Linux user `root` gets `admin` role automatically on first startup.
+### Managing users
+
+Go to **Admin → Users** to create, edit and delete users directly in the UI. No terminal access required.
 
 ---
 
-## Organisations
+## 🏢 Organisations
 
-Group Proxmox nodes logically — by customer, location or environment.
+Group Proxmox nodes by customer, location or environment. The sidebar shows a 3-level tree:
 
 ```
 🏢 Customer A
-   ├── pve-zurich-01   (3 VMs running)
-   └── pve-zurich-02   (1 VM stopped)
+   ├── 🖥 pve-zurich-01   2/3 VMs running
+   └── 🖥 pve-zurich-02   0/1 VMs running
 🏢 Customer B
-   └── pve-berlin-01   (2 VMs running)
-Unassigned
-   └── pve-dev-01
+   └── 🖥 pve-berlin-01   2/2 VMs running
+    Unassigned
+   └── 🖥 pve-dev-01
 ```
 
-Each organisation has its own **defaults** that override global settings for all hosts inside it:
+Each organisation has its own **defaults** (gateway, VLAN, storage, bridge, template name, DNS) that override global settings for all hosts inside. These can still be overridden per-host or per-VM.
 
-- Gateway, VLAN, storage pool, network bridge
-- Template VM name, DNS servers
-
-Defaults can still be overridden per-host and per-VM.
-
-**Create an organisation:** click the 🏢 button in the sidebar, or go to **Admin → Organisations**.
+Click **🏢** in the sidebar or go to **Admin → Organisations** to create one.
 
 ---
 
-## Deploying VMs
+## ⚙️ Settings
 
-### 1 — Configure global defaults
+Before deploying, configure the network defaults under **Settings**:
 
-**Settings** → set gateway, subnet, VLAN, DNS, Administrator password, timezone.
+- Network prefix, gateway, subnet mask
+- Default VLAN (e.g. `10`)
+- Primary and secondary DNS
+- Windows Administrator password
+- Timezone and locale
 
-### 2 — Add a Proxmox host
+These are the global defaults — organisations, hosts and individual VMs can override them.
 
-Click **+ Add Host**. You need a Proxmox API token with admin rights:
+---
+
+## 🚀 Deploying VMs
+
+### Setup checklist
+1. ✅ Template VM built and converted in Proxmox
+2. ✅ Proxmox API token created with `PVEAdmin` role
+3. ✅ Network settings configured in **Settings**
+4. ✅ Organisation created (optional)
+5. ✅ Host added via **+ Add Host**
+6. ✅ VMs added via **+** in the sidebar
+
+Then go to **Deploy → ⚡ Deploy All**. The log streams live. Click **✕ Abort** at any time — all VMs created during this run are deleted automatically from Proxmox.
+
+### API token for Proxmox
 
 ```bash
 pveum user token add root@pam deployment-token --privsep=0
 pveum acl modify / --token 'root@pam!deployment-token' --role PVEAdmin
 ```
 
-Enter the **Template VM Name** exactly as it appears in Proxmox (e.g. `win2025-template`), assign an organisation if applicable.
-
-### 3 — Add VMs
-
-Click **+** in the sidebar. Set hostname, IP, role — and optionally VLAN and bridge per VM to override the defaults.
-
-### 4 — Deploy
-
-**Deploy → ⚡ Deploy All**. The log streams live. Click **✕ Abort** at any time — all VMs created during this run are deleted automatically.
-
 ### VM roles
 
-| # | Role | Windows Features installed |
+| # | Role | Windows Features |
 |---|---|---|
-| 1 | Domain Controller | AD-Domain-Services, DNS, DHCP, GPMC, RSAT-AD-Tools |
-| 2 | File Server | FS-FileServer, FS-DFS-Namespace, FS-DFS-Replication, FS-Resource-Manager |
-| 3 | Backup Server | Base config only — install backup software manually |
-| 4 | RDS Broker | RDS-Connection-Broker, RDS-Licensing, RDS-Web-Access |
-| 5 | RDS Session Host | RDS-RD-Server, Desktop-Experience |
-| 6 | Print Server | Print-Server, RSAT-Print-Services |
-| 7 | Management | Full RSAT suite + GPMC |
+| 1 | 🛡 Domain Controller | AD-Domain-Services, DNS, DHCP, GPMC, RSAT-AD-Tools |
+| 2 | 📁 File Server | FS-FileServer, FS-DFS-Namespace, FS-DFS-Replication |
+| 3 | 💾 Backup Server | Base config only — install backup software manually |
+| 4 | 🔀 RDS Broker | RDS-Connection-Broker, RDS-Licensing, RDS-Web-Access |
+| 5 | 🖥 RDS Session Host | RDS-RD-Server, Desktop-Experience |
+| 6 | 🖨 Print Server | Print-Server, RSAT-Print-Services |
+| 7 | ⚙️ Management | Full RSAT suite + GPMC |
 
 Every VM gets: hostname, static IP, timezone, DNS servers, RDP enabled.
 
 ---
 
-## Deployment templates
+## 💾 Deployment templates
 
-Save a full VM configuration as a reusable template.
+Save a full VM configuration as a reusable template and share it across your team.
 
-| Template type | Who can see it |
-|---|---|
-| Global (admin) | All users |
-| Personal (deploy role) | Owner only |
+| | Global template | Personal template |
+|---|---|---|
+| Created by | admin | deploy or admin |
+| Visible to | everyone | owner only |
+| Export/Import | ✅ JSON | ✅ JSON |
 
-**Save current config:** Deploy view → 💾 Save as Template  
-**Apply a template:** Templates tab → ⚡ Use  
-**Share:** Export as JSON → send file → Import on another instance
+**Save:** Deploy view → 💾 **Save as Template**  
+**Apply:** Templates tab → ⚡ **Use**  
+**Share:** Export JSON → send file → Import on another instance
 
 ---
 
-## VM management
+## 🖱️ VM management
 
-Click any VM in the sidebar or grid to open the detail panel:
+Click any VM to open the detail panel:
 
-| Action | |
+| | |
 |---|---|
 | ▶ Start / ■ Stop | Power control via Proxmox API |
-| ↺ Reboot / ⏻ Shutdown | Graceful or forced |
+| ↺ Reboot / ⏻ Shutdown | Graceful restart or shutdown |
 | 🖥 Open Console | Direct link to Proxmox KVM console |
 | ⬇ Download .rdp | Ready-to-use RDP file for Windows Remote Desktop |
 
 ---
 
-## Data storage
+## 🗄️ Data storage
 
-Everything is stored server-side — page reloads, multiple users and different browsers all see the same state.
+Everything is stored server-side — reloading the page, switching browsers or using multiple accounts all show the same state.
 
 | File | Contents |
 |---|---|
 | `data/config.json` | Hosts, VMs, global settings |
 | `data/organisations.json` | Organisations and their defaults |
-| `data/users.json` | User → role mappings |
+| `data/users.json` | User accounts and roles |
 | `data/templates.json` | Deployment templates |
 | `data/deploy_state.json` | Current / last deploy log |
 | `data/deploy_history.json` | Last 50 deploy runs |
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-**Cloud-Init not applied (wrong IP / hostname after boot)**  
-Check `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log`. Most common cause: gateway is not in the same subnet as the VM IP, or Cloudbase-Init was not installed before Sysprep.
+**Cloud-Init not applied (wrong IP or hostname after boot)**  
+Check `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\log\cloudbase-init.log` on the VM. Most common cause: gateway is not in the same subnet as the VM IP, or Cloudbase-Init was not installed before Sysprep.
 
 **WinRM connection refused**  
-Allow 5–10 minutes after first boot — Cloudbase-Init needs to finish. Verify WinRM was pre-configured in the template (step 4).
+Allow 5–10 minutes after first boot — Cloudbase-Init needs to finish configuring WinRM. Verify WinRM was pre-configured in the template (step 4 above).
 
 **Credentials rejected by Ansible**  
-The password in **Settings → Windows Administrator Password** must match what Cloudbase-Init sets. Default is `Asdf1234!`.
+The password in **Settings → Windows Administrator Password** must match the one configured in the template. Default is `Asdf1234!`.
 
 **Template not found**  
-The Template VM Name must exactly match the Proxmox VM name (case-sensitive). Check under the node in the Proxmox UI.
+The Template VM Name must exactly match the Proxmox VM name (case-sensitive).
 
-**RDP not enabled**  
+**RDP not working**  
 Run on the VM: `Enable-NetFirewallRule -DisplayName 'Remote Desktop*'`
 
 ---
 
-## Files
+## 📁 Files
 
 ```
-setup.sh    — single-file installer + complete application
+setup.sh    — single-file installer and complete application
 README.md   — this file
 ```

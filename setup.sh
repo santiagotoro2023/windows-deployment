@@ -1153,20 +1153,14 @@ async function loadUsers() {
       <td><span class="role-badge role-${u.role}">${u.role}</span></td>
       <td style="font-size:11px;color:var(--text3)">${u.added ? new Date(u.added).toLocaleDateString() : '—'}</td>
       <td style="text-align:right">
-        <select style="background:var(--panel2);border:1px solid var(--b1);color:var(--text);padding:2px 4px;border-radius:var(--rad);font-size:11px" onchange="changeRole('${u.username}',this.value)">
-          <option value="admin"${u.role==='admin'?' selected':''}>admin</option>
-          <option value="deploy"${u.role==='deploy'?' selected':''}>deploy</option>
-          <option value="readonly"${u.role==='readonly'?' selected':''}>readonly</option>
-        </select>
+          <button class="btn btn-g btn-sm" onclick="openModal('edit-user','${u.username}')">✏</button>
         ${u.username!==S.session?.username ? `<button class="btn btn-d btn-sm" style="margin-left:4px" onclick="removeUser('${u.username}')">🗑</button>` : ''}
       </td>
     </tr>`).join('');
   } catch(e) { toast(e.message); }
 }
 
-async function changeRole(username, role) {
-  try { await api('PUT', `/api/users/${username}`, { role }); toast(`${username} → ${role}`, false); } catch(e) { toast(e.message); }
-}
+// changeRole removed — use saveEditUser instead
 async function removeUser(username) {
   if (!confirm(`Remove user ${username}?`)) return;
   try { await api('DELETE', `/api/users/${username}`); loadUsers(); } catch(e) { toast(e.message); }
@@ -1246,21 +1240,53 @@ function openModal(type, id, fromCurrentConfig) {
   if (type==='user-menu') {
     $('modal-title').textContent = S.session?.username||'';
     $('modal-body').innerHTML = `<p style="font-size:12px;color:var(--text2);margin-bottom:12px">Signed in as <strong>${S.session?.username}</strong> (${S.session?.role})</p>`;
-    $('modal-foot').innerHTML = `<button class="btn btn-d" onclick="doLogout()">Sign out</button><button class="btn btn-g" onclick="closeModal()">Close</button>`;
+    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal();openModal('change-password')">🔑 Change Password</button><button class="btn btn-d" onclick="doLogout()">Sign out</button>`;
     return;
   }
 
   if (type==='add-user') {
     $('modal-title').textContent = 'Add User';
     $('modal-body').innerHTML = `
-      <div class="ff"><label>Linux Username</label><input id="m-uname" autocomplete="off" placeholder="john"></div>
+      <div class="ff"><label>Username</label><input id="m-uname" autocomplete="off" placeholder="alice"></div>
+      <div class="ff"><label>Password</label><input type="password" id="m-upw" autocomplete="new-password" placeholder="Min. 8 characters"></div>
+      <div class="ff"><label>Confirm Password</label><input type="password" id="m-upw2" autocomplete="new-password" placeholder="Repeat password"></div>
       <div class="ff"><label>Role</label><select id="m-urole">
-        <option value="readonly">readonly — can only view</option>
-        <option value="deploy" selected>deploy — can deploy and manage VMs</option>
-        <option value="admin">admin — full access</option>
-      </select></div>
-      <p style="font-size:11px;color:var(--text2);margin-top:8px">The user must already exist as a Linux system user. They will authenticate with their system password.</p>`;
-    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="addUser()">Add User</button>`;
+        <option value="readonly">readonly \u2014 view only</option>
+        <option value="deploy" selected>deploy \u2014 manage VMs and deploy</option>
+        <option value="admin">admin \u2014 full access</option>
+      </select></div>`;
+    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="addUser()">Create User</button>`;
+    return;
+  }
+
+  if (type==='edit-user') {
+    api('GET','/api/users').then(users => {
+      const u = users.find(x=>x.username===id); if (!u) return;
+      const isSelf = u.username === S.session?.username;
+      $('modal-title').textContent = 'Edit User \u2014 '+u.username;
+      $('modal-body').innerHTML = `
+        <div class="ff"><label>Role</label><select id="e-urole"${isSelf?' disabled':''}>
+          <option value="readonly"${u.role==='readonly'?' selected':''}>readonly \u2014 view only</option>
+          <option value="deploy"${u.role==='deploy'?' selected':''}>deploy \u2014 manage VMs and deploy</option>
+          <option value="admin"${u.role==='admin'?' selected':''}>admin \u2014 full access</option>
+        </select></div>${isSelf?'<p style="font-size:11px;color:var(--text3)">You cannot change your own role.</p>':''}
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)">
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Reset Password (optional)</div>
+          <div class="ff"><label>New Password</label><input type="password" id="e-upw" autocomplete="new-password" placeholder="Leave blank to keep current"></div>
+          <div class="ff"><label>Confirm</label><input type="password" id="e-upw2" autocomplete="new-password" placeholder="Repeat new password"></div>
+        </div>`;
+      $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="saveEditUser('${id}')" >Save</button>`;
+    });
+    return;
+  }
+
+  if (type==='change-password') {
+    $('modal-title').textContent = 'Change Password';
+    $('modal-body').innerHTML = `
+      <div class="ff"><label>Current Password</label><input type="password" id="cp-cur" autocomplete="current-password"></div>
+      <div class="ff"><label>New Password</label><input type="password" id="cp-new" autocomplete="new-password" placeholder="Min. 8 characters"></div>
+      <div class="ff"><label>Confirm New Password</label><input type="password" id="cp-new2" autocomplete="new-password"></div>`;
+    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="changePassword()">Change Password</button>`;
     return;
   }
 
@@ -1382,9 +1408,32 @@ function openModal(type, id, fromCurrentConfig) {
 }
 
 async function addUser() {
-  const username = $('m-uname').value.trim(), role = $('m-urole').value;
+  const username = $('m-uname').value.trim();
+  const password = $('m-upw').value;
+  const password2 = $('m-upw2').value;
+  const role = $('m-urole').value;
   if (!username) { toast('Username required'); return; }
-  try { await api('POST', '/api/users', { username, role }); closeModal(); loadUsers(); toast('User added', false); } catch(e) { toast(e.message); }
+  if (!password) { toast('Password required'); return; }
+  if (password !== password2) { toast('Passwords do not match'); return; }
+  try { await api('POST', '/api/users', { username, password, role }); closeModal(); loadUsers(); toast('User created', false); } catch(e) { toast(e.message); }
+}
+
+async function saveEditUser(username) {
+  const role = $('e-urole')?.value;
+  const pw = $('e-upw')?.value;
+  const pw2 = $('e-upw2')?.value;
+  if (pw && pw !== pw2) { toast('Passwords do not match'); return; }
+  const body = {};
+  if (role) body.role = role;
+  if (pw) body.password = pw;
+  try { await api('PUT', `/api/users/${username}`, body); closeModal(); loadUsers(); toast('User updated', false); } catch(e) { toast(e.message); }
+}
+
+async function changePassword() {
+  const cur = $('cp-cur').value, nw = $('cp-new').value, nw2 = $('cp-new2').value;
+  if (!cur || !nw) { toast('All fields required'); return; }
+  if (nw !== nw2) { toast('New passwords do not match'); return; }
+  try { await api('POST', '/api/auth/change-password', { currentPassword: cur, newPassword: nw }); closeModal(); toast('Password changed', false); } catch(e) { toast(e.message); }
 }
 
 function applyRoleDef(role) {
@@ -1661,30 +1710,29 @@ function auth(minRole) {
   };
 }
 
-// ── PAM authentication ───────────────────────────────────────────────────────
-function pamAuth(username, password) {
-  try {
-    // Use pam_authenticate via python3-pampy or su -c
-    const script = `
-import pam, sys
-p = pam.pam()
-ok = p.authenticate(sys.argv[1], sys.argv[2], service='login')
-sys.exit(0 if ok else 1)
-`;
-    execSync(`python3 -c ${JSON.stringify(script)} ${JSON.stringify(username)} ${JSON.stringify(password)}`, { timeout: 5000 });
-    return true;
-  } catch {
-    return false;
-  }
+// ── Internal auth (bcrypt, no PAM/system users needed) ───────────────────────
+const bcrypt = require('bcryptjs');
+const BCRYPT_ROUNDS = 10;
+
+function hashPassword(pw) { return bcrypt.hashSync(pw, BCRYPT_ROUNDS); }
+function verifyPassword(pw, hash) {
+  // Support legacy plain-text passwords during transition
+  if (!hash.startsWith('$2')) return pw === hash;
+  return bcrypt.compareSync(pw, hash);
 }
 
-// Bootstrap: ensure at least one admin exists in users.json
+// Bootstrap: create default admin if no users exist
 function ensureUsers() {
   const users = loadJson(USERS_FILE, {});
   if (Object.keys(users).length === 0) {
-    // Default: root gets admin if no users configured yet
-    users['root'] = { role: 'admin', added: new Date().toISOString() };
+    users['admin'] = {
+      role: 'admin',
+      passwordHash: hashPassword('admin'),
+      added: new Date().toISOString(),
+      mustChangePassword: true,
+    };
     saveJson(USERS_FILE, users);
+    console.log('[windows-deployment] Created default admin user (password: admin) — change immediately!');
   }
 }
 ensureUsers();
@@ -1694,10 +1742,11 @@ app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
   const users = loadJson(USERS_FILE, {});
-  if (!users[username]) return res.status(401).json({ error: 'User not authorized for this application' });
-  if (!pamAuth(username, password)) return res.status(401).json({ error: 'Invalid credentials' });
-  const token = createSession(username, users[username].role);
-  res.json({ token, username, role: users[username].role });
+  const user = users[username];
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!verifyPassword(password, user.passwordHash)) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = createSession(username, user.role);
+  res.json({ token, username, role: user.role, mustChangePassword: !!user.mustChangePassword });
 });
 
 app.post('/api/auth/logout', auth('readonly'), (req, res) => {
@@ -1717,21 +1766,48 @@ app.get('/api/users', auth('admin'), (req, res) => {
 });
 
 app.post('/api/users', auth('admin'), (req, res) => {
-  const { username, role } = req.body;
-  if (!username || !['admin','deploy','readonly'].includes(role))
-    return res.status(400).json({ error: 'username and role (admin/deploy/readonly) required' });
+  const { username, role, password } = req.body;
+  if (!username || !['admin','deploy','readonly'].includes(role) || !password)
+    return res.status(400).json({ error: 'username, role and password required' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   const users = loadJson(USERS_FILE, {});
-  users[username] = { role, added: new Date().toISOString(), addedBy: req.session.username };
+  if (users[username]) return res.status(409).json({ error: 'Username already exists' });
+  users[username] = {
+    role,
+    passwordHash: hashPassword(password),
+    added: new Date().toISOString(),
+    addedBy: req.session.username,
+  };
   saveJson(USERS_FILE, users);
   res.json({ success: true });
 });
 
 app.put('/api/users/:username', auth('admin'), (req, res) => {
-  const { role } = req.body;
-  if (!['admin','deploy','readonly'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+  const { role, password } = req.body;
+  if (role && !['admin','deploy','readonly'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
   const users = loadJson(USERS_FILE, {});
   if (!users[req.params.username]) return res.status(404).json({ error: 'User not found' });
-  users[req.params.username].role = role;
+  if (role) users[req.params.username].role = role;
+  if (password) {
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    users[req.params.username].passwordHash = hashPassword(password);
+    users[req.params.username].mustChangePassword = false;
+  }
+  saveJson(USERS_FILE, users);
+  res.json({ success: true });
+});
+
+// Change own password (any authenticated user)
+app.post('/api/auth/change-password', auth('readonly'), (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword required' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const users = loadJson(USERS_FILE, {});
+  const user = users[req.session.username];
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!verifyPassword(currentPassword, user.passwordHash)) return res.status(401).json({ error: 'Current password incorrect' });
+  user.passwordHash = hashPassword(newPassword);
+  user.mustChangePassword = false;
   saveJson(USERS_FILE, users);
   res.json({ success: true });
 });
@@ -2153,7 +2229,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`windows-deployment → http://0.0.0.0:${PORT}`));
 JS_EOF
 
-  echo '{"name":"windows-deployment","version":"1.0.0","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^4.18.2","cors":"^2.8.5","cookie-parser":"^1.4.6"}}' > "${DIR}/backend/package.json"
+  echo '{"name":"windows-deployment","version":"1.0.0","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^4.18.2","cors":"^2.8.5","cookie-parser":"^1.4.6","bcryptjs":"^2.4.3"}}' > "${DIR}/backend/package.json"
 
   # ---------------------------------------------------------------------------
   # ansible/ansible.cfg
@@ -2763,7 +2839,7 @@ install() {
 
   sec "System packages"
   apt-get update -qq 2>&1 | tee -a "$LOG"
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget python3 python3-pip ca-certificates gnupg libpam0g-dev 2>&1 | tee -a "$LOG"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl wget python3 python3-pip ca-certificates gnupg 2>&1 | tee -a "$LOG"
   ok "System packages"
 
   sec "Node.js 20"
@@ -2775,7 +2851,7 @@ install() {
 
   sec "Ansible"
   # apt gibt Ansible 2.14 — zu alt. pip installiert aktuelle Version (2.17+).
-  pip3 install --break-system-packages --upgrade ansible proxmoxer requests pywinrm python-pam >>"$LOG" 2>&1
+  pip3 install --break-system-packages --upgrade ansible proxmoxer requests pywinrm >>"$LOG" 2>&1
   export PATH="$PATH:/usr/local/bin:$HOME/.local/bin"
   ANSIBLE_BIN=$(python3 -c "import shutil; print(shutil.which('ansible') or '/usr/local/bin/ansible')")
   inf "Ansible binary: ${ANSIBLE_BIN}"
