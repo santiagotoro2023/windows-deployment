@@ -279,7 +279,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <span class="login-logo-name">windows-deployment</span>
     </div>
     <div class="login-title">Sign in</div>
-    <div class="login-sub">Use your Linux system credentials</div>
+    <div class="login-sub">Sign in with your account credentials</div>
     <div class="login-err" id="login-err"></div>
     <div class="ff"><label>Username</label><input id="login-user" autocomplete="username" placeholder="root"></div>
     <div class="ff"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
@@ -467,7 +467,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <div class="view" id="view-admin">
   <div class="ph">
     <div class="ph-l"><div class="ph-title">Administration</div><div class="ph-sub">Manage users and access</div></div>
-    <div class="ph-r"><button class="btn btn-a btn-sm" onclick="openModal('add-user')">+ Add User</button></div>
+    <div class="ph-r"></div>
   </div>
   <div class="sg" style="margin-bottom:10px">
     <div class="sg-head" style="display:flex;align-items:center;justify-content:space-between">
@@ -477,7 +477,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="sg-body" style="padding:0"><div id="org-list"></div></div>
   </div>
   <div class="sg">
-    <div class="sg-head">👤 Users</div>
+    <div class="sg-head" style="display:flex;align-items:center;justify-content:space-between"><span>👤 Users</span><button class="btn btn-a btn-sm" onclick="openModal('add-user')">+ Add User</button></div>
     <div class="sg-body" style="padding:0">
       <table class="user-table" id="user-table">
         <thead><tr><th>Username</th><th>Role</th><th>Added</th><th></th></tr></thead>
@@ -524,12 +524,13 @@ const ST_CLS = { running:'st-run', stopped:'st-stop', cloning:'st-clone', config
 
 // ── State ────────────────────────────────────────────────────────────────────
 let S = {
-  hosts:[], vms:[], selVm:null, selHost:null, flt:'all', view:'overview',
+  orgs:[], hosts:[], vms:[], selVm:null, selHost:null, selOrg:null, flt:'all', view:'overview',
   deploying:false, session:null,
   settings:{ net:'172.16.10', gw:'172.16.10.1', pfx:24, dns1:'8.8.8.8', dns2:'1.1.1.1', vlan:'', cpus:2, ram:4096, disk:75, pass:'Asdf1234!', tz:'W. Europe Standard Time', locale:'de-CH' }
 };
 
 const $  = id => document.getElementById(id);
+const ob = id => S.orgs.find(o => o.id === id);
 const hb = id => S.hosts.find(h => h.id === id);
 const vb = id => S.vms.find(v => v.id === id);
 const q  = () => ($('sb-input')||{}).value?.toLowerCase() || '';
@@ -625,13 +626,13 @@ function setFlt(f, btn) {
 // ── Load all state from backend ───────────────────────────────────────────────
 async function loadState() {
   try {
-    const [hosts, vms, settings] = await Promise.all([
+    const [orgs, hosts, vms, settings] = await Promise.all([
+      api('GET', '/api/organisations'),
       api('GET', '/api/hosts'),
       api('GET', '/api/vms'),
       api('GET', '/api/settings'),
     ]);
-    S.hosts = hosts; S.vms = vms;
-    if (settings && Object.keys(settings).length) Object.assign(S.settings, settings);
+    S.orgs = orgs; S.hosts = hosts; S.vms = vms;
   } catch(e) { if (!e.message.includes('authenticated')) toast('Failed to load state: ' + e.message); }
 }
 
@@ -1306,7 +1307,7 @@ function openModal(type, id, fromCurrentConfig) {
         <div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="vmbr0"></div>
       </div>
       <div class="ff"><label>Default VLAN (optional)</label><input id="m-dvlan" autocomplete="off" placeholder="10"></div>
-      '+( S.orgs.length ? '<div class="ff"><label>Organisation (optional)</label><select id="m-org-id"><option value="">— No organisation —</option>'+S.orgs.map(o=>'<option value="'+o.id+'">'+o.name+'</option>').join("")+'</select></div>' : "")+'`;
+      ${S.orgs.length ? `<div class="ff"><label>Organisation (optional)</label><select id="m-org-id"><option value="">— No organisation —</option>${S.orgs.map(o=>`<option value="${o.id}">${o.name}</option>`).join("")}</select></div>` : ""}\`;
     $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="saveHost()">Save Host</button>`;
     return;
   }
@@ -1384,25 +1385,59 @@ function openModal(type, id, fromCurrentConfig) {
 
   if (type==='new-template'||type==='edit-template') {
     const isEdit = type==='edit-template';
-    let existingTmpl = null;
+    $('modal-title').textContent = isEdit ? 'Edit Template' : 'New Template';
+    $('modal').style.maxWidth = '580px';
+    // Independent VM list — not linked to S.vms
+    window._tmplVms = [];
+    const renderTmplVmList = () => {
+      const el = $('tmpl-vm-list'); if (!el) return;
+      el.innerHTML = window._tmplVms.length
+        ? window._tmplVms.map((v,i) => `
+            <div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--b1)">
+              <span style="font-size:13px;width:18px">${ROLES[v.role]?.icon||"□"}</span>
+              <span style="font-family:var(--mono);font-size:11.5px;flex:1">${v.hostname}</span>
+              <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${v.ip}</span>
+              <span style="font-size:10px;color:var(--text2);min-width:90px">${ROLES[v.role]?.label||v.role}</span>
+              <button class="btn btn-d btn-sm" style="padding:2px 7px" onclick="_tmplRemove(${i})">✕</button>
+            </div>`).join('')
+        : '<div style="color:var(--text3);font-size:12px;padding:8px 0">No VMs — add some below</div>';
+    };
+    window._tmplRemove = (i) => { window._tmplVms.splice(i,1); renderTmplVmList(); };
+    window._tmplAdd = () => {
+      const hn=($('tadd-hn').value||'').trim(), ip=($('tadd-ip').value||'').trim(), role=$('tadd-role').value;
+      if (!hn||!ip) { toast('Hostname and IP required'); return; }
+      window._tmplVms.push({ hostname:hn, ip, role, cpus:2, ram:4096, disk:75, vlan:'', bridge:'' });
+      renderTmplVmList();
+      $('tadd-hn').value=''; $('tadd-ip').value='';
+    };
+    const roleOpts = Object.entries(ROLES).map(([k,r])=>`<option value="${k}">${r.icon} ${r.label}</option>`).join('');
+    $('modal-body').innerHTML = `
+      <div class="ff"><label>Template Name</label><input id="tmpl-name" autocomplete="off" placeholder="Standard DC + File Server"></div>
+      <div class="ff"><label>Description</label><textarea id="tmpl-desc" rows="2" placeholder="What does this deployment include?"></textarea></div>
+      ${canAdmin ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><input type="checkbox" id="tmpl-global" ${!isEdit?'checked':''}><label style="font-size:12px;color:var(--text2);margin-bottom:0">Global — visible to all users</label></div>` : ''}
+      <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:600;margin-top:4px">VMs in this template</div>
+      <div id="tmpl-vm-list" style="margin-bottom:10px;min-height:32px"></div>
+      <div style="background:var(--panel2);border:1px solid var(--b1);border-radius:var(--rad);padding:10px">
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:600">Add VM</div>
+        <div class="g2" style="margin-bottom:6px">
+          <div class="ff" style="margin-bottom:0"><label>Hostname</label><input id="tadd-hn" autocomplete="off" placeholder="dc01"></div>
+          <div class="ff" style="margin-bottom:0"><label>IP Address</label><input id="tadd-ip" autocomplete="off" placeholder="172.16.10.11"></div>
+        </div>
+        <div class="ff" style="margin-bottom:8px"><label>Role</label><select id="tadd-role">${roleOpts}</select></div>
+        <button class="btn btn-g btn-fw" onclick="_tmplAdd()">+ Add VM to template</button>
+      </div>`;
+    renderTmplVmList();
     if (isEdit) {
-      // We need templates — fetch async but modal is sync, so we handle via promise
       api('GET','/api/templates').then(templates => {
-        existingTmpl = templates.find(t=>t.id===id);
-        if (!existingTmpl) return;
-        $('tmpl-name').value = existingTmpl.name;
-        $('tmpl-desc').value = existingTmpl.description||'';
-        if ($('tmpl-global')) $('tmpl-global').checked = existingTmpl.global;
+        const t = templates.find(x=>x.id===id); if (!t) return;
+        $('tmpl-name').value = t.name;
+        $('tmpl-desc').value = t.description||'';
+        if ($('tmpl-global')) $('tmpl-global').checked = !!t.global;
+        window._tmplVms = JSON.parse(JSON.stringify(t.vms||[]));
+        renderTmplVmList();
       });
     }
-    $('modal-title').textContent = isEdit ? 'Edit Template' : 'New Template';
-    const useCurrent = !isEdit;
-    $('modal-body').innerHTML = `
-      <div class="ff"><label>Template Name</label><input id="tmpl-name" autocomplete="off" placeholder="Standard DC + File Server Setup"></div>
-      <div class="ff"><label>Description</label><textarea id="tmpl-desc" rows="2" placeholder="What does this deployment include?"></textarea></div>
-      ${canAdmin ? `<div class="ff" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="tmpl-global" ${!isEdit?'checked':''}><label style="margin-bottom:0">Global (visible to all users)</label></div>` : ''}
-      ${useCurrent ? `<p style="font-size:11px;color:var(--text2);margin-top:8px">Current VM configuration (${S.vms.length} VMs) and settings will be saved in this template.</p>` : ''}`;
-    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="${isEdit?`saveEditTemplate('${id}')`:'saveNewTemplate()'}">Save</button>`;
+    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal();$('modal').style.maxWidth=''">Cancel</button><button class="btn btn-a" onclick="${isEdit?`saveEditTemplate('${id}')`:'saveNewTemplate()'}">Save Template</button>`;
     return;
   }
 }
@@ -1496,7 +1531,7 @@ async function saveNewTemplate() {
   if (!name) { toast('Name required'); return; }
   const isGlobal = $('tmpl-global')?.checked ?? false;
   try {
-    await api('POST','/api/templates',{ name, description:$('tmpl-desc').value, vms:S.vms, settings:S.settings, global:isGlobal });
+    await api('POST','/api/templates',{ name, description:$('tmpl-desc').value, vms:window._tmplVms||[], settings:S.settings, global:isGlobal });
     closeModal(); toast('Template saved',false); if (S.view==='templates') loadTemplates();
   } catch(e) { toast(e.message); }
 }
@@ -1505,7 +1540,7 @@ async function saveEditTemplate(id) {
   const name=($('tmpl-name').value||'').trim();
   if (!name) { toast('Name required'); return; }
   try {
-    await api('PUT',`/api/templates/${id}`,{ name, description:$('tmpl-desc').value, global:$('tmpl-global')?.checked??false });
+    await api('PUT',`/api/templates/${id}`,{ name, description:$('tmpl-desc').value, global:$('tmpl-global')?.checked??false, vms:window._tmplVms||[] });
     closeModal(); loadTemplates(); toast('Template updated',false);
   } catch(e) { toast(e.message); }
 }
