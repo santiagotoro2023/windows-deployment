@@ -864,7 +864,9 @@ function renderGrid() {
         <span class="vc-m">${v.ram/1024}GB</span><span class="vc-m">·</span>
         <span class="vc-m">${v.disk}GB</span>
         ${v.vlan ? `<span class="vc-m">·</span><span class="vc-m">VLAN${v.vlan}</span>` : ''}
-        <span class="vc-m" style="margin-left:auto">${hb(v.hostId)?.name||'?'}</span>
+        <span class="vc-m" style="margin-left:auto;color:var(--text3)">
+          ${(()=>{ const h=hb(v.hostId); const o=ob(h?.orgId); return o?o.name+' / '+h.name : h?.name||'?'; })()}
+        </span>
       </div>
     </div>`;
   }).join('');
@@ -1402,10 +1404,53 @@ function openModal(type, id, fromCurrentConfig) {
   }
 
   if (type==='vm') {
-    const defRole=ROLES['dc'];
+    // Require at least one organisation
+    if (!S.orgs.length) {
+      $('modal-title').textContent = 'Add VM';
+      $('modal-body').innerHTML = `
+        <div style="text-align:center;padding:20px 0;color:var(--text2)">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px;opacity:.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">No organisations yet</div>
+          <div style="font-size:12px;color:var(--text3)">Create an organisation first. VMs inherit network settings, credentials and defaults from their organisation.</div>
+        </div>`;
+      $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="closeModal();openModal('new-org')">Create Organisation</button>`;
+      return;
+    }
+
+    const defRole = ROLES['dc'];
+    const s = S.settings;
+
+    // Helper: when org changes, update host list + prefill defaults
+    window._vmOrgChanged = (orgId) => {
+      const org = S.orgs.find(o => o.id === orgId);
+      const od  = org?.defaults || {};
+      const orgHosts = S.hosts.filter(h => h.orgId === orgId);
+
+      // Rebuild host selector
+      const hsel = $('m-hid');
+      hsel.innerHTML = orgHosts.length
+        ? orgHosts.map(h => `<option value="${h.id}">${h.name} (${h.host})</option>`).join('')
+        : '<option value="">— No hosts in this organisation —</option>';
+
+      // Prefill defaults from org (only if field is still at default/empty)
+      if (od.vlan)   { const f=$('m-vlan');      if (!f.dataset.touched) f.placeholder=od.vlan; }
+      if (od.bridge) { const f=$('m-bridge-vm'); if (!f.dataset.touched) f.placeholder=od.bridge; }
+      // IP placeholder
+      const netPfx = od.netPrefix || '';
+      const ipf = $('m-ip');
+      if (netPfx && !ipf.dataset.touched) ipf.placeholder = netPfx + '.10';
+    };
+
     $('modal-title').textContent = 'Add VM';
     $('modal-body').innerHTML = `
-      <div class="ff"><label>Proxmox Host</label><select id="m-hid">${S.hosts.map(h=>`<option value="${h.id}">${h.name} (${h.host})</option>`).join('')}</select></div>
+      <div class="ff"><label>Organisation</label>
+        <select id="m-org-sel" onchange="window._vmOrgChanged(this.value)">
+          ${S.orgs.map(o=>`<option value="${o.id}">${o.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="ff"><label>Host</label>
+        <select id="m-hid"></select>
+      </div>
       <div class="ff"><label>Role</label>
         <select id="m-role" onchange="applyRoleDef(this.value)">
           ${Object.entries(ROLES).map(([k,v])=>`<option value="${k}">${v.icon}  ${v.label}</option>`).join('')}
@@ -1413,7 +1458,7 @@ function openModal(type, id, fromCurrentConfig) {
       </div>
       <div class="g2">
         <div class="ff"><label>Hostname</label><input id="m-hn" autocomplete="off" placeholder="dc01"></div>
-        <div class="ff"><label>IP Address</label><input id="m-ip" autocomplete="off" placeholder="${s.net}.10"></div>
+        <div class="ff"><label>IP Address</label><input id="m-ip" autocomplete="off" placeholder="172.16.10.10" oninput="this.dataset.touched='1'"></div>
       </div>
       <div class="g3">
         <div class="ff"><label>CPUs</label><input type="number" id="m-cpus" autocomplete="off" value="${defRole.dcpu}"></div>
@@ -1421,11 +1466,12 @@ function openModal(type, id, fromCurrentConfig) {
         <div class="ff"><label>Disk (GB)</label><input type="number" id="m-disk" autocomplete="off" value="${s.disk}"></div>
       </div>
       <div class="g2">
-        <div class="ff"><label>VLAN (overrides default)</label><input id="m-vlan" autocomplete="off" placeholder="${s.vlan||'none'}"></div>
-        <div class="ff"><label>Bridge (overrides default)</label><input id="m-bridge-vm" autocomplete="off" placeholder="${S.hosts[0]?.bridge||'vmbr0'}"></div>
-      </div>
-      `;
+        <div class="ff"><label>VLAN override</label><input id="m-vlan" autocomplete="off" placeholder="from org" oninput="this.dataset.touched='1'"></div>
+        <div class="ff"><label>Bridge override</label><input id="m-bridge-vm" autocomplete="off" placeholder="from org" oninput="this.dataset.touched='1'"></div>
+      </div>`;
     $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="saveVm()">+ Add VM</button>`;
+    // Trigger org change to populate hosts + defaults
+    setTimeout(() => window._vmOrgChanged(S.orgs[0]?.id), 0);
     return;
   }
 
@@ -1586,8 +1632,10 @@ async function saveEditHost(id) {
 async function saveVm() {
   const hn=($('m-hn').value||'').trim(), ip=($('m-ip').value||'').trim();
   if (!hn||!ip) { toast('Hostname and IP required'); return; }
-  if (!S.hosts.length) { toast('Add a Proxmox host first'); return; }
-  const vm = { hostId:$('m-hid').value||S.hosts[0].id, role:$('m-role').value, hostname:hn, name:hn, ip,
+  const hostId = $('m-hid')?.value;
+  if (!hostId) { toast('Select a host — add hosts to this organisation first'); return; }
+  const orgId  = $('m-org-sel')?.value || '';
+  const vm = { hostId, orgId, role:$('m-role').value, hostname:hn, name:hn, ip,
     cpus:+$('m-cpus').value||S.settings.cpus, ram:+$('m-ram').value||S.settings.ram,
     disk:+$('m-disk').value||S.settings.disk, vlan:$('m-vlan').value||'',
     bridge:$('m-bridge-vm').value||'', status:'pending', prog:0 };
