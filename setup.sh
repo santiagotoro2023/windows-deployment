@@ -2978,26 +2978,103 @@ SVCEOF
 # =============================================================================
 uninstall() {
   banner; check_root
-  echo -e "${BOLD}${RED}Removes:${NC} service · ${DIR} · firewall rules"
-  echo -e "${YEL}Proxmox VMs are not affected.${NC}\n"
-  read -rp "$(echo -e "${BOLD}${RED}Type 'yes' to confirm: ${NC}")" c
-  [[ "$c" == "yes" ]] || { echo "Aborted."; exit 0; }
 
-  systemctl stop    "${APP}" 2>/dev/null && ok "Stopped"  || true
-  systemctl disable "${APP}" 2>/dev/null && ok "Disabled" || true
-  [[ -f "$SVC" ]] && rm -f "$SVC" && systemctl daemon-reload && ok "Service file removed"
+  echo -e "${BOLD}${RED}This will completely remove:${NC}"
+  echo -e "  • systemd service + unit file"
+  echo -e "  • Application directory  ${BOLD}${DIR}${NC}"
+  echo -e "  • Log file               ${BOLD}${LOG}${NC}"
+  echo -e "  • npm packages           (node_modules inside ${DIR})"
+  echo -e "  • pip packages           ansible · proxmoxer · pywinrm · requests"
+  echo -e "  • Ansible collections    (inside ${DIR})"
+  echo -e "  • UFW rule               port ${PORT}/tcp"
+  echo -e ""
+  echo -e "  ${YEL}Node.js itself is NOT removed (system package).${NC}"
+  echo -e "  ${YEL}Proxmox VMs are NOT affected.${NC}"
+  echo -e ""
 
-  BAK=""
-  if [[ -f "${DIR}/backend/data/config.json" ]]; then
-    BAK="/tmp/${APP}-config-$(date +%Y%m%d-%H%M%S).json"
-    cp "${DIR}/backend/data/config.json" "$BAK" && ok "Config backed up → ${BAK}"
+  # Optional: offer data backup
+  if [[ -d "${DIR}/backend/data" ]]; then
+    read -rp "$(echo -e "${BOLD}Back up data files before removing? [Y/n]: ${NC}")" _bak
+    _bak="${_bak:-Y}"
+    if [[ "$_bak" =~ ^[Yy] ]]; then
+      BAK="/tmp/${APP}-data-$(date +%Y%m%d-%H%M%S).tar.gz"
+      tar -czf "$BAK" -C "${DIR}/backend" data 2>/dev/null && ok "Data backed up → ${BAK}" || warn "Backup failed — continuing anyway"
+    fi
   fi
-  [[ -d "$DIR" ]] && rm -rf "$DIR" && ok "Removed: ${DIR}"
-  command -v ufw &>/dev/null && ufw delete allow 3000/tcp 2>/dev/null || true
-  [[ -f "$LOG" ]] && rm -f "$LOG"
 
-  echo -e "\n${BOLD}${GREEN}✓ Fully uninstalled${NC}"
-  [[ -n "$BAK" ]] && echo -e "  Config backup: ${BOLD}${BAK}${NC}"
+  read -rp "$(echo -e "${BOLD}${RED}Type 'yes' to confirm full removal: ${NC}")" c
+  [[ "$c" == "yes" ]] || { echo "Aborted."; exit 0; }
+  echo ""
+
+  # ── 1. Stop and remove systemd service ──────────────────────────────────────
+  sec "systemd service"
+  systemctl stop    "${APP}" 2>/dev/null && ok "Service stopped"   || true
+  systemctl disable "${APP}" 2>/dev/null && ok "Service disabled"  || true
+  if [[ -f "$SVC" ]]; then
+    rm -f "$SVC"
+    systemctl daemon-reload
+    systemctl reset-failed 2>/dev/null || true
+    ok "Unit file removed + daemon reloaded"
+  else
+    warn "Unit file not found (${SVC})"
+  fi
+
+  # ── 2. Remove application directory ─────────────────────────────────────────
+  sec "Application files"
+  if [[ -d "$DIR" ]]; then
+    rm -rf "$DIR"
+    ok "Removed: ${DIR}"
+  else
+    warn "Directory not found: ${DIR}"
+  fi
+
+  # ── 3. Remove log file ───────────────────────────────────────────────────────
+  sec "Log file"
+  if [[ -f "$LOG" ]]; then
+    rm -f "$LOG"
+    ok "Removed: ${LOG}"
+  else
+    warn "Log not found: ${LOG}"
+  fi
+
+  # ── 4. Remove pip packages ───────────────────────────────────────────────────
+  sec "Python packages"
+  PIP_PKGS=(ansible proxmoxer pywinrm requests)
+  for pkg in "${PIP_PKGS[@]}"; do
+    pip3 uninstall -y "$pkg" --break-system-packages 2>/dev/null && ok "pip: removed ${pkg}" || warn "pip: ${pkg} not found"
+  done
+
+  # ── 5. Remove ansible-related leftover files ─────────────────────────────────
+  sec "Ansible leftovers"
+  for candidate in \
+    /usr/local/lib/python3*/dist-packages/ansible* \
+    /usr/local/lib/python3*/dist-packages/proxmoxer* \
+    /usr/local/lib/python3*/dist-packages/winrm* \
+    ~/.ansible \
+    /root/.ansible
+  do
+    if [[ -e "$candidate" ]]; then
+      rm -rf "$candidate" && ok "Removed: ${candidate}" || warn "Could not remove: ${candidate}"
+    fi
+  done
+
+  # ── 6. UFW firewall rule ─────────────────────────────────────────────────────
+  sec "Firewall"
+  if command -v ufw &>/dev/null; then
+    ufw delete allow "${PORT}/tcp" 2>/dev/null && ok "UFW: rule for port ${PORT} removed" || warn "UFW: no rule found for port ${PORT}"
+  else
+    warn "UFW not installed — skipping"
+  fi
+
+  # ── 7. journald logs ─────────────────────────────────────────────────────────
+  sec "Journal logs"
+  journalctl --rotate 2>/dev/null || true
+  journalctl --vacuum-time=1s --unit="${APP}" 2>/dev/null && ok "Journal entries cleared" || warn "Could not clear journal (non-fatal)"
+
+  echo ""
+  echo -e "${BOLD}${GREEN}✓ Fully uninstalled — system is clean.${NC}"
+  echo -e "  Run ${BOLD}sudo bash setup.sh${NC} for a fresh install."
+  [[ -n "${BAK:-}" ]] && echo -e "  Data backup: ${BOLD}${BAK}${NC}"
   echo ""
 }
 
