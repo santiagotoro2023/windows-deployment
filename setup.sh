@@ -492,7 +492,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 </div><!-- #content -->
 </div><!-- #layout -->
 
-<div id="modal-bg" onclick="if(event.target===this)closeModal()">
+<div id="modal-bg" onclick="if(event.target===this)closeModal()" data-1p-ignore data-lpignore="true" autocomplete="off">
   <div id="modal">
     <div class="mhd"><h3 id="modal-title"></h3><button onclick="closeModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 5px;border-radius:var(--rad)">✕</button></div>
     <div class="mbd" id="modal-body"></div>
@@ -725,6 +725,34 @@ function clickHost(id) {
 function clickVm(id) { S.selVm = id; S.selHost = null; renderTree(q()); renderGrid(); showVmDetail(id); }
 function closeDetail() { S.selVm=null; S.selHost=null; S.selOrg=null; $('dp').classList.remove('open'); renderTree(q()); renderGrid(); }
 
+// ── Authenticated file downloads ─────────────────────────────────────────────
+async function downloadRdp(vmId, hostname) {
+  try {
+    const token = getToken();
+    const res = await fetch(`/api/vms/${vmId}/rdp`, { headers: { 'x-session': token } });
+    if (!res.ok) { toast('RDP download failed: ' + (await res.json()).error); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${hostname}.rdp`;
+    a.click(); URL.revokeObjectURL(url);
+  } catch(e) { toast(e.message); }
+}
+
+async function exportTemplate(templateId, templateName) {
+  try {
+    const token = getToken();
+    const res = await fetch(`/api/templates/${templateId}/export`, { headers: { 'x-session': token } });
+    if (!res.ok) { toast('Export failed: ' + (await res.json()).error); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (templateName||'template').replace(/[^a-z0-9]/gi,'_');
+    a.href = url; a.download = `${safeName}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  } catch(e) { toast(e.message); }
+}
+
 function showOrgDetail(id) {
   const org = ob(id); if (!org) return;
   const orgHosts = S.hosts.filter(h => h.orgId===org.id);
@@ -859,7 +887,7 @@ function showVmDetail(id) {
     </div>
     <div class="dp-actions">
       ${consoleUrl ? `<a href="${consoleUrl}" target="_blank" class="btn btn-console btn-fw">🖥 Open Console</a>` : ''}
-      <a href="/api/vms/${v.id}/rdp" class="btn btn-rdp btn-fw">⬇ Download .rdp</a>
+      <button class="btn btn-rdp btn-fw" onclick="downloadRdp('${v.id}','${v.hostname}')">⬇ Download .rdp</button>
       ${canEdit ? `<button class="btn btn-g btn-fw" onclick="openModal('edit-vm','${v.id}')">✏ Edit</button><div class="sep"></div><button class="btn btn-d btn-fw" onclick="delVm('${v.id}')">🗑 Remove</button>` : ''}
     </div>`;
 }
@@ -1068,7 +1096,7 @@ async function loadTemplates() {
         </div>
         <div class="tmpl-actions">
           <button class="btn btn-a btn-sm" onclick="applyTemplate('${t.id}')">⚡ Use</button>
-          <a href="/api/templates/${t.id}/export" class="btn btn-g btn-sm">↓ Export</a>
+          <button class="btn btn-g btn-sm" onclick="exportTemplate('${t.id}','${t.name}')">↓ Export</button>
           ${canEdit&&(S.session?.role==='admin'||t.owner===S.session?.username)?`
             <button class="btn btn-g btn-sm" onclick="openModal('edit-template','${t.id}')">✏</button>
             <button class="btn btn-d btn-sm" onclick="delTemplate('${t.id}')">🗑</button>
@@ -1340,6 +1368,7 @@ function openModal(type, id, fromCurrentConfig) {
     const defRole=ROLES['dc'];
     $('modal-title').textContent = 'Add VM';
     $('modal-body').innerHTML = `
+      <div class="ff"><label>Proxmox Host</label><select id="m-hid">${S.hosts.map(h=>`<option value="${h.id}">${h.name} (${h.host})</option>`).join('')}</select></div>
       <div class="ff"><label>Role</label>
         <select id="m-role" onchange="applyRoleDef(this.value)">
           ${Object.entries(ROLES).map(([k,v])=>`<option value="${k}">${v.icon}  ${v.label}</option>`).join('')}
@@ -1358,7 +1387,7 @@ function openModal(type, id, fromCurrentConfig) {
         <div class="ff"><label>VLAN (overrides default)</label><input id="m-vlan" autocomplete="off" placeholder="${s.vlan||'none'}"></div>
         <div class="ff"><label>Bridge (overrides default)</label><input id="m-bridge-vm" autocomplete="off" placeholder="${S.hosts[0]?.bridge||'vmbr0'}"></div>
       </div>
-      ${S.hosts.length>1?`<div class="ff"><label>Proxmox Host</label><select id="m-hid">${S.hosts.map(h=>`<option value="${h.id}">${h.name} (${h.host})</option>`).join('')}</select></div>`:`<input type="hidden" id="m-hid" value="${S.hosts[0]?.id||''}">`}`;
+      `;
     $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="saveVm()">+ Add VM</button>`;
     return;
   }
@@ -1738,7 +1767,7 @@ function destroySession(token) { delete sessions[token]; saveJson(SESSIONS_FILE,
 function auth(minRole) {
   const ORDER = { readonly: 0, deploy: 1, admin: 2 };
   return (req, res, next) => {
-    const token = req.headers['x-session'] || req.cookies?.session;
+    const token = req.headers['x-session'] || req.query?.token || req.cookies?.session;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     const s = getSession(token);
     if (!s) return res.status(401).json({ error: 'Session expired' });
@@ -2009,7 +2038,6 @@ app.post('/api/hosts', auth('admin'), async (req, res) => {
   const { name, host, node, tokenId, tokenSecret, templateName, storage, bridge, defaultVlan, orgId } = req.body;
   if (!name || !host || !tokenId || !tokenSecret) return res.status(400).json({ error: 'name, host, tokenId, tokenSecret required' });
   const c = load();
-  c.hosts = c.hosts.filter(h => h.host !== host);
   c.hosts.push({
     id: Date.now().toString(), name, host, node: node||'pve', tokenId, tokenSecret,
     templateName: templateName||'win2025-template', storage: storage||'local-lvm',
