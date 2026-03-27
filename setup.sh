@@ -1293,22 +1293,25 @@ function openModal(type, id, fromCurrentConfig) {
 
   if (type==='host') {
     $('modal-title').textContent = 'Add Proxmox Host';
-    $('modal-body').innerHTML = `
-      <div class="ff"><label>Display Name</label><input id="m-name" autocomplete="off" placeholder="pve-main"></div>
-      <div class="g2">
-        <div class="ff"><label>Host IP / FQDN</label><input id="m-host" autocomplete="off" placeholder="172.16.10.2"></div>
-        <div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="pve"></div>
-      </div>
-      <div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" placeholder="root@pam!deployment-token"></div>
-      <div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password"></div>
-      <div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" placeholder="win2025-template"></div>
-      <div class="g2">
-        <div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="local-lvm"></div>
-        <div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="vmbr0"></div>
-      </div>
-      <div class="ff"><label>Default VLAN (optional)</label><input id="m-dvlan" autocomplete="off" placeholder="10"></div>
-      ${S.orgs.length ? `<div class="ff"><label>Organisation (optional)</label><select id="m-org-id"><option value="">— No organisation —</option>${S.orgs.map(o=>`<option value="${o.id}">${o.name}</option>`).join("")}</select></div>` : ""}\`;
-    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="saveHost()">Save Host</button>`;
+    const orgOpts = S.orgs.length
+      ? '<div class="ff"><label>Organisation (optional)</label><select id="m-org-id"><option value="">— No organisation —</option>'
+        + S.orgs.map(o=>'<option value="'+o.id+'">'+o.name+'</option>').join('')
+        + '</select></div>'
+      : '';
+    $('modal-body').innerHTML =
+      '<div class="ff"><label>Display Name</label><input id="m-name" autocomplete="off" placeholder="pve-main"></div>'
+      + '<div class="g2"><div class="ff"><label>Host IP / FQDN</label><input id="m-host" autocomplete="off" placeholder="172.16.10.2"></div>'
+      + '<div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="pve"></div></div>'
+      + '<div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" placeholder="root@pam!deployment-token"></div>'
+      + '<div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password"></div>'
+      + '<div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" placeholder="win2025-template"></div>'
+      + '<div class="g2"><div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="local-lvm"></div>'
+      + '<div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="vmbr0"></div></div>'
+      + '<div class="ff"><label>Default VLAN (optional)</label><input id="m-dvlan" autocomplete="off" placeholder="10"></div>'
+      + orgOpts;
+    $('modal-foot').innerHTML =
+      '<button class="btn btn-g" onclick="closeModal()">Cancel</button>'
+      + '<button class="btn btn-a" onclick="saveHost()">Save Host</button>';
     return;
   }
 
