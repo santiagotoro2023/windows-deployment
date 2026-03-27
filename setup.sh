@@ -281,7 +281,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="login-title">Sign in</div>
     <div class="login-sub">Sign in with your account credentials</div>
     <div class="login-err" id="login-err"></div>
-    <div class="ff"><label>Username</label><input id="login-user" autocomplete="username" placeholder="root"></div>
+    <div class="ff"><label>Username</label><input id="login-user" autocomplete="username" placeholder="admin" data-1p-ignore="false" data-lpignore="false"></div>
     <div class="ff"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
     <button class="btn btn-a btn-fw" onclick="doLogin()" style="margin-top:4px">Sign in</button>
   </div>
@@ -413,53 +413,52 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <!-- SETTINGS -->
 <div class="view" id="view-settings">
   <div class="ph">
-    <div class="ph-l"><div class="ph-title">Settings</div><div class="ph-sub">Global defaults — applied to every new VM</div></div>
+    <div class="ph-l"><div class="ph-title">Settings</div><div class="ph-sub">Application defaults — network and credentials are configured per organisation or host</div></div>
     <div class="ph-r"><button class="btn btn-a btn-sm" id="save-btn" onclick="saveSettings()">Save</button></div>
-  </div>
-  <div class="sg">
-    <div class="sg-head">🌍 Network</div>
-    <div class="sg-body">
-      <div class="g3">
-        <div class="ff"><label>Network prefix</label><input id="s-net" autocomplete="off" value="172.16.10"></div>
-        <div class="ff"><label>Gateway</label><input id="s-gw" autocomplete="off" value="172.16.10.1"></div>
-        <div class="ff"><label>Subnet</label><input type="number" id="s-pfx" autocomplete="off" value="24" min="8" max="30"></div>
-      </div>
-      <div class="g2">
-        <div class="ff"><label>Primary DNS</label><input id="s-dns1" autocomplete="off" value="8.8.8.8"></div>
-        <div class="ff"><label>Secondary DNS</label><input id="s-dns2" autocomplete="off" value="1.1.1.1"></div>
-      </div>
-      <div class="ff"><label>Default VLAN (leave empty for none)</label><input id="s-vlan" autocomplete="off" placeholder="e.g. 10"></div>
-    </div>
   </div>
   <div class="sg">
     <div class="sg-head">💻 Default VM Resources</div>
     <div class="sg-body">
+      <p style="font-size:11.5px;color:var(--text2);margin-bottom:12px">These are the default values pre-filled when adding a new VM. Override them per VM as needed.</p>
       <div class="g3">
         <div class="ff"><label>CPUs</label><input type="number" id="s-cpus" autocomplete="off" value="2" min="1" max="64"></div>
         <div class="ff"><label>RAM (MB)</label><input type="number" id="s-ram" autocomplete="off" value="4096" step="1024"></div>
         <div class="ff"><label>Disk (GB)</label><input type="number" id="s-disk" autocomplete="off" value="75" min="40"></div>
       </div>
-      <div class="ff"><label>Windows Administrator Password</label><input type="password" id="s-pass" autocomplete="new-password" value="Asdf1234!"></div>
     </div>
   </div>
   <div class="sg">
     <div class="sg-head">🕐 Locale & Timezone</div>
-    <div class="sg-body"><div class="g2">
-      <div class="ff"><label>Timezone</label><select id="s-tz">
-        <option value="W. Europe Standard Time" selected>W. Europe Standard Time (CH/DE/AT)</option>
-        <option value="UTC">UTC</option>
-        <option value="GMT Standard Time">GMT Standard Time (UK)</option>
-        <option value="Eastern Standard Time">Eastern Standard Time (US/East)</option>
-        <option value="Pacific Standard Time">Pacific Standard Time (US/West)</option>
-      </select></div>
-      <div class="ff"><label>Locale</label><select id="s-locale">
-        <option value="de-CH" selected>de-CH (Swiss German)</option>
-        <option value="de-DE">de-DE (German)</option>
-        <option value="en-US">en-US (English US)</option>
-        <option value="en-GB">en-GB (English UK)</option>
-        <option value="fr-CH">fr-CH (Swiss French)</option>
-      </select></div>
-    </div></div>
+    <div class="sg-body">
+      <p style="font-size:11.5px;color:var(--text2);margin-bottom:12px">Applied to every deployed Windows VM.</p>
+      <div class="g2">
+        <div class="ff"><label>Timezone</label><select id="s-tz">
+          <option value="W. Europe Standard Time" selected>W. Europe Standard Time (CH/DE/AT)</option>
+          <option value="UTC">UTC</option>
+          <option value="GMT Standard Time">GMT Standard Time (UK)</option>
+          <option value="Eastern Standard Time">Eastern Standard Time (US/East)</option>
+          <option value="Pacific Standard Time">Pacific Standard Time (US/West)</option>
+        </select></div>
+        <div class="ff"><label>Locale</label><select id="s-locale">
+          <option value="de-CH" selected>de-CH (Swiss German)</option>
+          <option value="de-DE">de-DE (German)</option>
+          <option value="en-US">en-US (English US)</option>
+          <option value="en-GB">en-GB (English UK)</option>
+          <option value="fr-CH">fr-CH (Swiss French)</option>
+        </select></div>
+      </div>
+    </div>
+  </div>
+  <div class="sg">
+    <div class="sg-head">ℹ️ Network & Credentials</div>
+    <div class="sg-body">
+      <p style="font-size:12px;color:var(--text2);line-height:1.6">
+        Network settings (gateway, VLAN, DNS, bridge, storage) and the Windows Administrator password
+        are configured <strong>per organisation</strong> or <strong>per host</strong> — not globally.<br><br>
+        Go to <strong>Admin → Organisations</strong> to set these defaults, or configure them
+        individually when adding a host.
+      </p>
+    </div>
   </div>
 </div>
 
@@ -574,7 +573,13 @@ async function doLogin() {
 $('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
 function showLogin() { $('login-screen').style.display = 'flex'; clearToken(); S.session = null; }
-function hideLogin() { $('login-screen').style.display = 'none'; }
+function hideLogin() {
+  $('login-screen').style.display = 'none';
+  // Clear credentials from DOM so password managers don't re-trigger
+  const u = $('login-user'), p = $('login-pass');
+  if (u) u.value = '';
+  if (p) p.value = '';
+}
 
 async function doLogout() {
   try { await api('POST', '/api/auth/logout'); } catch(_) {}
@@ -1503,6 +1508,23 @@ async function changePassword() {
   try { await api('POST', '/api/auth/change-password', { currentPassword: cur, newPassword: nw }); closeModal(); toast('Password changed', false); } catch(e) { toast(e.message); }
 }
 
+async function saveHostToOrg(orgId) {
+  const n=($('m-name').value||'').trim(), h=($('m-host').value||'').trim();
+  if (!n||!h) { toast('Name and host IP required'); return; }
+  const newHost = {
+    name:n, host:h, node:$('m-node').value||'pve',
+    tokenId:$('m-tokid').value, tokenSecret:$('m-toksec').value,
+    templateName:$('m-tmpl').value||'win2025-template',
+    storage:$('m-stor').value||'local-lvm', bridge:$('m-bridge').value||'vmbr0',
+    defaultVlan:$('m-dvlan').value||'', orgId
+  };
+  try {
+    await api('POST','/api/hosts',newHost);
+    await loadState(); closeDetail(); closeModal(); renderAll();
+    toast('Host added to organisation',false);
+  } catch(e) { toast(e.message); }
+}
+
 function applyRoleDef(role) {
   const r=ROLES[role]||{};
   if (r.dcpu) $('m-cpus').value=r.dcpu;
@@ -1582,9 +1604,11 @@ async function saveNewOrg() {
   const name = ($('org-name').value||'').trim();
   if (!name) { toast('Name required'); return; }
   const defaults = {
-    gateway: $('org-gw').value||'', vlan: $('org-vlan').value||'',
-    storage: $('org-storage').value||'', bridge: $('org-bridge').value||'',
-    templateName: $('org-tmpl').value||'', dns1: $('org-dns1').value||'', dns2: $('org-dns2').value||'',
+    gateway: $('org-gw').value||'', pfx: $('org-pfx').value||'',
+    netPrefix: $('org-netpfx').value||'', dns1: $('org-dns1').value||'', dns2: $('org-dns2').value||'',
+    vlan: $('org-vlan').value||'', bridge: $('org-bridge').value||'',
+    storage: $('org-storage').value||'', templateName: $('org-tmpl').value||'',
+    pass: $('org-pass').value||'',
   };
   try {
     const r = await api('POST','/api/organisations',{ name, description:$('org-desc').value, defaults });
@@ -1598,9 +1622,11 @@ async function saveEditOrg(id) {
   const name = ($('org-name').value||'').trim();
   if (!name) { toast('Name required'); return; }
   const defaults = {
-    gateway: $('org-gw').value||'', vlan: $('org-vlan').value||'',
-    storage: $('org-storage').value||'', bridge: $('org-bridge').value||'',
-    templateName: $('org-tmpl').value||'', dns1: $('org-dns1').value||'', dns2: $('org-dns2').value||'',
+    gateway: $('org-gw').value||'', pfx: $('org-pfx').value||'',
+    netPrefix: $('org-netpfx').value||'', dns1: $('org-dns1').value||'', dns2: $('org-dns2').value||'',
+    vlan: $('org-vlan').value||'', bridge: $('org-bridge').value||'',
+    storage: $('org-storage').value||'', templateName: $('org-tmpl').value||'',
+    pass: $('org-pass').value||'',
   };
   try {
     await api('PUT',`/api/organisations/${id}`,{ name, description:$('org-desc').value, defaults });
@@ -1628,20 +1654,26 @@ function orgDefaultsForm(d) {
   d = d || {};
   return `
     <div style='margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)'>
-    <div style='font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px'>Organisation Defaults <span style='color:var(--text3);font-weight:400'>(override global settings for hosts in this org)</span></div>
+    <div style='font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:600'>Organisation Defaults</div>
     <div class='g2'>
-      <div class='ff'><label>Gateway</label><input id='org-gw' autocomplete='off' value='${d.gateway||''}' placeholder='172.16.10.1'></div>
-      <div class='ff'><label>Default VLAN</label><input id='org-vlan' autocomplete='off' value='${d.vlan||''}' placeholder='10'></div>
+      <div class='ff'><label>Gateway</label><input id='org-gw' autocomplete='off' value='${d.gateway||""}' placeholder='172.16.10.1'></div>
+      <div class='ff'><label>Network prefix</label><input id='org-netpfx' autocomplete='off' value='${d.netPrefix||""}' placeholder='172.16.10'></div>
+    </div>
+    <div class='g3'>
+      <div class='ff'><label>Subnet</label><input id='org-pfx' autocomplete='off' value='${d.pfx||""}' placeholder='24'></div>
+      <div class='ff'><label>Primary DNS</label><input id='org-dns1' autocomplete='off' value='${d.dns1||""}' placeholder='8.8.8.8'></div>
+      <div class='ff'><label>Secondary DNS</label><input id='org-dns2' autocomplete='off' value='${d.dns2||""}' placeholder='1.1.1.1'></div>
     </div>
     <div class='g2'>
-      <div class='ff'><label>Storage Pool</label><input id='org-storage' autocomplete='off' value='${d.storage||''}' placeholder='local-lvm'></div>
-      <div class='ff'><label>Network Bridge</label><input id='org-bridge' autocomplete='off' value='${d.bridge||''}' placeholder='vmbr0'></div>
+      <div class='ff'><label>Default VLAN</label><input id='org-vlan' autocomplete='off' value='${d.vlan||""}' placeholder='10'></div>
+      <div class='ff'><label>Network Bridge</label><input id='org-bridge' autocomplete='off' value='${d.bridge||""}' placeholder='vmbr0'></div>
     </div>
-    <div class='ff'><label>Template VM Name</label><input id='org-tmpl' autocomplete='off' value='${d.templateName||''}' placeholder='win2025-template'></div>
     <div class='g2'>
-      <div class='ff'><label>Primary DNS</label><input id='org-dns1' autocomplete='off' value='${d.dns1||''}' placeholder='8.8.8.8'></div>
-      <div class='ff'><label>Secondary DNS</label><input id='org-dns2' autocomplete='off' value='${d.dns2||''}' placeholder='1.1.1.1'></div>
-    </div></div>`;
+      <div class='ff'><label>Storage Pool</label><input id='org-storage' autocomplete='off' value='${d.storage||""}' placeholder='local-lvm'></div>
+      <div class='ff'><label>Template VM Name</label><input id='org-tmpl' autocomplete='off' value='${d.templateName||""}' placeholder='win2025-template'></div>
+    </div>
+    <div class='ff'><label>Windows Admin Password</label><input id='org-pass' autocomplete='off' data-1p-ignore data-lpignore='true' value='${d.pass||""}' placeholder='Asdf1234!' style='font-family:var(--mono)'></div>
+    </div>`;
 }
 
 function closeModal() { $('modal-bg').classList.remove('open'); }
@@ -2198,6 +2230,12 @@ app.post('/api/deploy', auth('deploy'), (req, res) => {
 
   const s = c.settings || {};
   const h = c.hosts[0];
+  // Resolve org defaults for this host
+  const orgs = loadJson(ORGS_FILE, []);
+  const hostOrg = orgs.find(o => o.id === h.orgId);
+  const od = hostOrg?.defaults || {};  // org defaults
+  // Helper: pick first non-empty value from candidates
+  const pick = (...vals) => vals.find(v => v !== undefined && v !== null && v !== '') || '';
   const ROLE_ORDER = ['dc','fileserver','backupserver','rds_broker','rds_sessionhost','printserver','mgmt'];
   const activeRoles = ROLE_ORDER.filter(role => c.vms.some(v => v.role === role));
 
@@ -2209,18 +2247,23 @@ app.post('/api/deploy', auth('deploy'), (req, res) => {
     members.forEach(v => ini += `${v.hostname} ansible_host=${v.ip}\n`);
     ini += '\n';
   });
+  const resolvedPass    = pick(od.pass, s.pass, 'Asdf1234!');
+  const resolvedGw      = pick(h.defaultGateway, od.gateway, '172.16.10.1');
+  const resolvedPfx     = pick(h.subnetPfx, od.pfx, 24);
+  const resolvedDns1    = pick(h.dns1, od.dns1, '8.8.8.8');
+  const resolvedDns2    = pick(h.dns2, od.dns2, '1.1.1.1');
   ini += `[windows:vars]
 ansible_user=Administrator
-ansible_password=${s.pass||'Asdf1234!'}
+ansible_password=${resolvedPass}
 ansible_connection=winrm
 ansible_winrm_transport=basic
 ansible_winrm_port=5985
 ansible_winrm_server_cert_validation=ignore
 ansible_winrm_scheme=http
-network_gateway=${s.gw||'172.16.10.1'}
-network_prefix_length=${s.pfx||24}
-dns_primary=${s.dns1||'8.8.8.8'}
-dns_secondary=${s.dns2||'1.1.1.1'}
+network_gateway=${resolvedGw}
+network_prefix_length=${resolvedPfx}
+dns_primary=${resolvedDns1}
+dns_secondary=${resolvedDns2}
 win_timezone=${s.tz||'W. Europe Standard Time'}
 win_locale=${s.locale||'de-CH'}
 `;
@@ -2228,19 +2271,21 @@ win_locale=${s.locale||'de-CH'}
 
   const serversJson = c.vms.map(v => ({
     hostname: v.hostname, ip: v.ip, cpus: v.cpus||2, ram: v.ram||4096, disk: v.disk||75, role: v.role,
-    vlan: v.vlan || h.defaultVlan || '',
-    bridge: v.bridge || h.bridge || 'vmbr0',
+    vlan: pick(v.vlan, h.defaultVlan, od.vlan, ''),
+    bridge: pick(v.bridge, h.bridge, od.bridge, 'vmbr0'),
   }));
 
   const extraVars = {
     proxmox_host: h.host, proxmox_node: h.node,
-    proxmox_template_name: h.templateName||'win2025-template',
-    proxmox_storage: h.storage, proxmox_bridge: h.bridge,
+    proxmox_template_name: pick(h.templateName, od.templateName, 'win2025-template'),
+    proxmox_storage: pick(h.storage, od.storage, 'local-lvm'),
+    proxmox_bridge: pick(h.bridge, od.bridge, 'vmbr0'),
     proxmox_token_id: h.tokenId, proxmox_token_secret: h.tokenSecret,
-    win_admin_pass: s.pass||'Asdf1234!',
-    network_gateway: s.gw||'172.16.10.1',
-    network_prefix_length: s.pfx||24,
-    dns_primary: s.dns1||'8.8.8.8', dns_secondary: s.dns2||'1.1.1.1',
+    win_admin_pass: pick(od.pass, s.pass, 'Asdf1234!'),
+    network_gateway: pick(h.defaultGateway, od.gateway, '172.16.10.1'),
+    network_prefix_length: pick(h.subnetPfx, od.pfx, 24),
+    dns_primary: pick(h.dns1, od.dns1, '8.8.8.8'),
+    dns_secondary: pick(h.dns2, od.dns2, '1.1.1.1'),
     win_timezone: s.tz||'W. Europe Standard Time',
     win_locale: s.locale||'de-CH',
   };
