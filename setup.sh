@@ -279,7 +279,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <div class="view" id="view-deploy">
   <div class="ph">
     <div class="ph-l"><div class="ph-title">Deploy</div><div class="ph-sub">Clone template VMs on Proxmox, apply network config, install Windows roles</div></div>
-    <div class="ph-r"><button class="btn btn-dep" id="dep-btn" onclick="startDeploy()">⚡ Deploy All</button></div>
+    <div class="ph-r" style="display:flex;gap:6px">
+      <button class="btn btn-dep" id="dep-btn" onclick="startDeploy()">⚡ Deploy All</button>
+      <button class="btn btn-d" id="abort-btn" onclick="abortDeploy()" style="display:none">✕ Abort</button>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 280px;gap:14px">
     <div>
@@ -721,6 +724,7 @@ async function startDeploy() {
 
   $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono);animation:blink .8s infinite">● LIVE</span>';
   $('deploy-status-bar').classList.add('visible');
+  $('abort-btn').style.display = '';
 
   _pollInterval = setInterval(pollDeployStatus, 1500);
 }
@@ -759,8 +763,32 @@ async function pollDeployStatus() {
 function stopDeploy() {
   S.deploying = false;
   $('dep-btn').disabled = false;
+  $('dep-btn').style.display = '';
+  $('abort-btn').style.display = 'none';
   clearInterval(_pollInterval);
   setTimeout(() => $('deploy-status-bar').classList.remove('visible'), 3000);
+}
+
+async function abortDeploy() {
+  if (!S.deploying) return;
+  const ok = confirm('Abort deployment? All VMs created so far will be deleted from Proxmox.');
+  if (!ok) return;
+  $('abort-btn').disabled = true;
+  $('abort-btn').textContent = 'Aborting…';
+  $('dsb-text').textContent = 'Aborting — cleaning up VMs…';
+  try {
+    const data = await api('POST', '/api/deploy/abort', {});
+    if (data.cleaning?.length) {
+      toast(`Stopping deploy — deleting ${data.cleaning.length} VM(s)…`, false);
+    } else {
+      toast('Deploy aborted — no VMs to clean up', false);
+    }
+  } catch(e) {
+    toast('Abort failed: ' + e.message);
+  }
+  $('abort-btn').disabled = false;
+  $('abort-btn').textContent = '✕ Abort';
+  stopDeploy();
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -998,6 +1026,7 @@ document.querySelectorAll('.tnb').forEach(b => {
   if (status.running) {
     S.deploying = true;
     $('dep-btn').disabled = true;
+    $('abort-btn').style.display = '';
     $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono);animation:blink .8s infinite">● LIVE</span>';
     $('deploy-status-bar').classList.add('visible');
     _pollInterval = setInterval(pollDeployStatus, 1500);
@@ -1127,6 +1156,8 @@ function saveDeployState(s) {
 let { running, log: deployLog, exitCode: lastExitCode } = loadDeployState();
 // If server restarted mid-deploy, mark as finished
 if (running) { running = false; deployLog += '\n[restarted — deploy state reset]\n'; saveDeployState({ running, log: deployLog, exitCode: lastExitCode }); }
+let currentProc = null;   // handle to running ansible-playbook process
+let deployedVmids = [];   // VMIDs created during this deploy, for rollback
 
 app.post('/api/deploy', (req, res) => {
   if (running) return res.status(409).json({ error: 'Deploy already running' });
@@ -1208,8 +1239,18 @@ win_locale=${s.locale||'de-CH'}
   saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
   res.json({ success: true });
 
+  // Write a VMID tracking file path into extra-vars so pve_clone.py can record created VMIDs
+  const vmidFile = path.join(ADIR, 'inventory', '_created_vmids.json');
+  try { fs.writeFileSync(vmidFile, '[]'); } catch(_) {}
+  deployedVmids = [];
+  const evFileWithVmids = path.join(ADIR, 'inventory', '_extra_vars.json');
+  const evContent = JSON.parse(fs.readFileSync(evFileWithVmids, 'utf8'));
+  evContent.vmid_file = vmidFile;
+  fs.writeFileSync(evFileWithVmids, JSON.stringify(evContent));
+
   const cmd = `cd "${ADIR}" && $(python3 -c "import shutil; print(shutil.which('ansible-playbook') or '/usr/local/bin/ansible-playbook')") site.yml -i inventory/hosts.ini -e "@inventory/_extra_vars.json" 2>&1`;
-  const proc = exec(cmd);
+  currentProc = exec(cmd);
+  const proc = currentProc;
 
   let flushTimer = null;
   function flushLog() {
@@ -1219,7 +1260,10 @@ win_locale=${s.locale||'de-CH'}
   proc.stderr?.on('data', d => { deployLog += d; clearTimeout(flushTimer); flushTimer = setTimeout(flushLog, 500); });
   proc.on('close', code => {
     running = false;
+    currentProc = null;
     lastExitCode = code;
+    // Read created VMIDs from tracking file
+    try { deployedVmids = JSON.parse(fs.readFileSync(vmidFile, 'utf8')); } catch(_) {}
     deployLog += `\n[windows-deployment] Process exited with code ${code}\n`;
     saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
     try { fs.unlinkSync(evFile); } catch(_) {}
@@ -1227,7 +1271,54 @@ win_locale=${s.locale||'de-CH'}
 });
 
 app.get('/api/deploy/status', (req, res) => {
-  res.json({ running, log: deployLog, exitCode: lastExitCode });
+  res.json({ running, log: deployLog, exitCode: lastExitCode, vmids: deployedVmids });
+});
+
+app.post('/api/deploy/abort', async (req, res) => {
+  if (!running && !currentProc) return res.status(400).json({ error: 'No deploy running' });
+  deployLog += '\n[windows-deployment] ABORT requested — stopping Ansible...\n';
+  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+
+  // Kill ansible-playbook process tree
+  if (currentProc) {
+    try { process.kill(-currentProc.pid, 'SIGTERM'); } catch(_) {}
+    try { currentProc.kill('SIGKILL'); } catch(_) {}
+    currentProc = null;
+  }
+  running = false;
+  lastExitCode = 130; // SIGINT-style
+  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+
+  // Read VMIDs that were created so far
+  const vmidFile = path.join(ADIR, 'inventory', '_created_vmids.json');
+  let vmids = [];
+  try { vmids = JSON.parse(fs.readFileSync(vmidFile, 'utf8')); } catch(_) {}
+
+  if (!vmids.length) {
+    deployLog += '[windows-deployment] No VMs to clean up.\n';
+    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+    return res.json({ success: true, cleaned: [] });
+  }
+
+  deployLog += `[windows-deployment] Cleaning up ${vmids.length} VM(s): ${vmids.join(', ')}...\n`;
+  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+
+  // Run cleanup script
+  const c = load();
+  const h = c.hosts?.[0];
+  if (!h) return res.json({ success: true, cleaned: [], note: 'No host config for cleanup' });
+
+  const cleanupScript = path.join(ADIR, 'pve_cleanup.py');
+  const cleanCmd = `python3 ${cleanupScript} '${h.host}' '${h.tokenId}' '${h.tokenSecret}' '${h.node}' '${vmids.join(',')}'`;
+  exec(cleanCmd, (err, stdout, stderr) => {
+    deployLog += stdout || '';
+    if (err) deployLog += `[cleanup error] ${stderr || err.message}\n`;
+    else     deployLog += '[windows-deployment] Cleanup complete.\n';
+    deployedVmids = [];
+    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+  });
+
+  res.json({ success: true, cleaning: vmids });
 });
 
 // ── Static frontend ────────────────────────────────────────────────────────
@@ -1368,6 +1459,7 @@ content = r"""---
     NET_GATEWAY:       "{{ network_gateway }}"
     DNS_PRIMARY:       "{{ dns_primary }}"
     WIN_PASS:          "{{ win_admin_pass }}"
+    VMID_FILE:         "{{ vmid_file | default('') }}"
   delegate_to: localhost
 
 - name: Wait for WinRM on all VMs (polls every 10s, no hardcoded sleep)
@@ -1547,15 +1639,28 @@ prefix_len    = os.environ['NET_PREFIX_LEN']
 gateway       = os.environ['NET_GATEWAY']
 dns           = os.environ['DNS_PRIMARY']
 win_pass      = os.environ['WIN_PASS']
+vmid_file     = os.environ.get('VMID_FILE', '')  # path to write created VMIDs for rollback
 
 if '!' in token_id:
     api_user, token_name = token_id.split('!', 1)
 else:
     api_user, token_name = 'root@pam', token_id
 
-log_lock  = threading.Lock()
-vmid_lock = threading.Lock()
-errors    = []
+log_lock      = threading.Lock()
+vmid_lock     = threading.Lock()
+errors        = []
+created_vmids = []  # track all VMIDs created, written to vmid_file for abort/rollback
+
+def record_vmid(vmid):
+    """Append a newly created VMID to the tracking file for abort/rollback."""
+    with vmid_lock:
+        created_vmids.append(vmid)
+        if vmid_file:
+            try:
+                with open(vmid_file, 'w') as f:
+                    json.dump(created_vmids, f)
+            except Exception:
+                pass
 
 def log(msg):
     with log_lock:
@@ -1628,6 +1733,7 @@ def clone_vm(srv):
                 upid = px.nodes(node).qemu(template_vmid).clone.post(
                     newid=vmid, name=hostname, full=1, storage=storage)
             wait_task(px, upid, f'{hostname} clone')
+            record_vmid(vmid)  # register for rollback before doing anything else
 
         # Resize disk first (while VM is stopped)
         try:
@@ -1697,6 +1803,63 @@ if errors:
     sys.exit(1)
 log('All VMs cloned, configured and started OK')
 PYCLONE
+
+  # pve_cleanup.py — deletes VMIDs from Proxmox via API token (called on abort)
+  cat > "${DIR}/ansible/pve_cleanup.py" << 'PYCLEANUP'
+#!/usr/bin/env python3
+import sys, json, time
+from proxmoxer import ProxmoxAPI
+
+if len(sys.argv) < 6:
+    print('Usage: pve_cleanup.py HOST TOKEN_ID TOKEN_SECRET NODE VMID1,VMID2,...')
+    sys.exit(1)
+
+host, token_id, token_secret, node = sys.argv[1:5]
+vmids = [int(v) for v in sys.argv[5].split(',') if v.strip()]
+
+if '!' in token_id:
+    api_user, token_name = token_id.split('!', 1)
+else:
+    api_user, token_name = 'root@pam', token_id
+
+print(f'[cleanup] Connecting to {host} as {api_user}')
+px = ProxmoxAPI(host, user=api_user, token_name=token_name,
+                token_value=token_secret, verify_ssl=False)
+
+def wait_task(upid, label, timeout=120):
+    task_node = upid.split(':')[1] if ':' in upid else node
+    start = time.time()
+    while True:
+        if timeout and time.time() - start > timeout:
+            print(f'  {label}: timed out')
+            return
+        try:
+            s = px.nodes(task_node).tasks(upid).status.get()
+            if s['status'] == 'stopped':
+                print(f'  {label}: done ({s.get("exitstatus","?")})')
+                return
+        except Exception:
+            pass
+        time.sleep(2)
+
+for vmid in vmids:
+    try:
+        print(f'[cleanup] Stopping VMID {vmid}...')
+        try:
+            upid = px.nodes(node).qemu(vmid).status.stop.post()
+            wait_task(upid, f'stop {vmid}')
+        except Exception as e:
+            print(f'  stop error (may already be stopped): {e}')
+        print(f'[cleanup] Deleting VMID {vmid}...')
+        upid = px.nodes(node).qemu(vmid).delete(purge=1)
+        wait_task(upid, f'delete {vmid}')
+        print(f'[cleanup] VMID {vmid} deleted OK')
+    except Exception as e:
+        print(f'[cleanup] ERROR on VMID {vmid}: {e}')
+
+print('[cleanup] All done')
+PYCLEANUP
+
 
   ok "All files written"
 }
