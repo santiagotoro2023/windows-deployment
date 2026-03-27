@@ -100,6 +100,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 #sb-input:focus{border-color:var(--amber)}#sb-input::placeholder{color:var(--text3)}
 .sb-plus{width:26px;height:26px;background:var(--amber);color:#000;border:none;border-radius:var(--rad);cursor:pointer;font-size:17px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .12s}
 .sb-plus:hover{opacity:.85}
+.sb-icon{width:26px;height:26px;border:1px solid;border-radius:var(--rad);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s;background:transparent}
+.sb-icon:hover{filter:brightness(1.15)}
 #tree{flex:1;overflow-y:auto;padding:3px 0 8px;user-select:none}
 #tree::-webkit-scrollbar{width:3px}#tree::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
 /* Org + host tree */
@@ -169,7 +171,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .dp-hic{width:26px;height:26px;border-radius:var(--rad);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
 .dp-htitle{font-weight:600;font-size:13px}
 .dp-hsub{font-size:10.5px;color:var(--text2);margin-top:1px}
-.dp-x{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 5px;border-radius:var(--rad);transition:all .1s;line-height:1}
+.dp-x{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:var(--rad);transition:all .1s;display:flex;align-items:center;line-height:0}
 .dp-x:hover{background:var(--panel2);color:var(--text)}
 .dp-scroll{flex:1;overflow-y:auto}
 .dp-scroll::-webkit-scrollbar{width:3px}
@@ -322,9 +324,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input id="sb-input" placeholder="Filter…" autocomplete="off" oninput="renderTree(this.value.toLowerCase())">
     </div>
-    <button class="sb-plus" onclick="openModal('vm')" title="Add VM" id="btn-add-vm">+</button>
-    <button style="width:26px;height:26px;background:rgba(232,160,32,.12);color:var(--amber);border:1px solid rgba(232,160,32,.25);border-radius:var(--rad);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0" onclick="openModal('host')" title="Add Host" id="btn-add-host">🖥</button>
-    <button style="width:26px;height:26px;background:rgba(167,139,250,.15);color:var(--purple);border:1px solid rgba(167,139,250,.3);border-radius:var(--rad);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0" onclick="openModal('new-org')" title="New Organisation" id="btn-add-org">🏢</button>
+    <button class="sb-plus" onclick="openModal('vm')" title="Add VM" id="btn-add-vm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    <button class="sb-icon" style="color:var(--amber);border-color:rgba(232,160,32,.3);background:rgba(232,160,32,.08)" onclick="openModal('host')" title="Add Host" id="btn-add-host"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></button>
+    <button class="sb-icon" style="color:var(--purple);border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.08)" onclick="openModal('new-org')" title="New Organisation" id="btn-add-org"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></button>
   </div>
   <div id="tree"></div>
 </div>
@@ -337,8 +339,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   <div class="ph">
     <div class="ph-l"><div class="ph-title">Overview</div><div class="ph-sub" id="ov-sub">—</div></div>
     <div class="ph-r">
-      <button class="btn btn-g btn-sm" onclick="renderAll()">↺ Refresh</button>
-      <button class="btn btn-a btn-sm" onclick="openModal('vm')" id="btn-ov-add">+ Add VM</button>
+      <button class="btn btn-g btn-sm" onclick="renderAll()" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg> Refresh</button>
+      <button class="btn btn-a btn-sm" onclick="openModal('vm')" id="btn-ov-add" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add VM</button>
     </div>
   </div>
   <div class="stat-row" id="stats"></div>
@@ -359,8 +361,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   <div class="ph">
     <div class="ph-l"><div class="ph-title">Deploy</div><div class="ph-sub">Clone template VMs on Proxmox, apply network config, install Windows roles</div></div>
     <div class="ph-r" style="display:flex;gap:6px">
-      <button class="btn btn-dep" id="dep-btn" onclick="startDeploy()">⚡ Deploy All</button>
-      <button class="btn btn-abort" id="abort-btn" onclick="abortDeploy()" style="display:none">✕ Abort</button>
+      <button class="btn btn-dep" id="dep-btn" onclick="startDeploy()" style="display:inline-flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Deploy All</button>
+      <button class="btn btn-abort" id="abort-btn" onclick="abortDeploy()" style="display:none;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Abort</button>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 280px;gap:14px">
@@ -380,7 +382,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       </div>
       <!-- Deploy History -->
       <div class="sc">
-        <div class="sc-head"><h3>Deploy History</h3><button class="btn btn-g btn-sm" style="margin-left:auto" onclick="loadHistory()">↺</button></div>
+        <div class="sc-head"><h3>Deploy History</h3><button class="btn btn-g btn-sm" style="margin-left:auto;display:inline-flex;align-items:center;gap:4px" onclick="loadHistory()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></div>
         <div class="sc-body" style="padding:0">
           <table class="hist-table" id="hist-table">
             <thead><tr><th>Started</th><th>By</th><th>VMs</th><th>Duration</th><th>Status</th></tr></thead>
@@ -403,8 +405,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   <div class="ph">
     <div class="ph-l"><div class="ph-title">Deployment Templates</div><div class="ph-sub">Save and share VM configurations</div></div>
     <div class="ph-r">
-      <button class="btn btn-g btn-sm" onclick="importTemplate()">↑ Import JSON</button>
-      <button class="btn btn-a btn-sm" onclick="openModal('new-template')">+ New Template</button>
+      <button class="btn btn-g btn-sm" onclick="importTemplate()" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Import</button>
+      <button class="btn btn-a btn-sm" onclick="openModal('new-template')" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Template</button>
     </div>
   </div>
   <div class="tmpl-grid" id="tmpl-grid"></div>
@@ -414,10 +416,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <div class="view" id="view-settings">
   <div class="ph">
     <div class="ph-l"><div class="ph-title">Settings</div><div class="ph-sub">Application defaults — network and credentials are configured per organisation or host</div></div>
-    <div class="ph-r"><button class="btn btn-a btn-sm" id="save-btn" onclick="saveSettings()">Save</button></div>
+    <div class="ph-r"><button class="btn btn-a btn-sm" id="save-btn" onclick="saveSettings()" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save</button></div>
   </div>
   <div class="sg">
-    <div class="sg-head">💻 Default VM Resources</div>
+    <div class="sg-head"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Default VM Resources</div>
     <div class="sg-body">
       <p style="font-size:11.5px;color:var(--text2);margin-bottom:12px">These are the default values pre-filled when adding a new VM. Override them per VM as needed.</p>
       <div class="g3">
@@ -428,7 +430,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     </div>
   </div>
   <div class="sg">
-    <div class="sg-head">🕐 Locale & Timezone</div>
+    <div class="sg-head"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Locale & Timezone</div>
     <div class="sg-body">
       <p style="font-size:11.5px;color:var(--text2);margin-bottom:12px">Applied to every deployed Windows VM.</p>
       <div class="g2">
@@ -450,7 +452,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     </div>
   </div>
   <div class="sg">
-    <div class="sg-head">ℹ️ Network & Credentials</div>
+    <div class="sg-head"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Network & Credentials</div>
     <div class="sg-body">
       <p style="font-size:12px;color:var(--text2);line-height:1.6">
         Network settings (gateway, VLAN, DNS, bridge, storage) and the Windows Administrator password
@@ -470,13 +472,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   </div>
   <div class="sg" style="margin-bottom:10px">
     <div class="sg-head" style="display:flex;align-items:center;justify-content:space-between">
-      <span>🏢 Organisations</span>
-      <button class="btn btn-a btn-sm" onclick="openModal('new-org')">+ New Organisation</button>
+      <span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Organisations</span>
+      <button class="btn btn-a btn-sm" onclick="openModal('new-org')" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Organisation</button>
     </div>
     <div class="sg-body" style="padding:0"><div id="org-list"></div></div>
   </div>
   <div class="sg">
-    <div class="sg-head" style="display:flex;align-items:center;justify-content:space-between"><span>👤 Users</span><button class="btn btn-a btn-sm" onclick="openModal('add-user')">+ Add User</button></div>
+    <div class="sg-head" style="display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> Users</span><button class="btn btn-a btn-sm" onclick="openModal('add-user')" style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add User</button></div>
     <div class="sg-body" style="padding:0">
       <table class="user-table" id="user-table">
         <thead><tr><th>Username</th><th>Role</th><th>Added</th><th></th></tr></thead>
@@ -493,7 +495,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 
 <div id="modal-bg" onclick="if(event.target===this)closeModal()" data-1p-ignore data-lpignore="true" autocomplete="off">
   <div id="modal">
-    <div class="mhd"><h3 id="modal-title"></h3><button onclick="closeModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 5px;border-radius:var(--rad)">✕</button></div>
+    <div class="mhd"><h3 id="modal-title"></h3><button onclick="closeModal()" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:var(--rad);display:flex;align-items:center;line-height:0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="mbd" id="modal-body"></div>
     <div class="mft" id="modal-foot"></div>
   </div>
@@ -520,6 +522,36 @@ const ST = {
   pending:     { l:'Pending',      c:'#3d5470', dot:'dot-pend' },
 };
 const ST_CLS = { running:'st-run', stopped:'st-stop', cloning:'st-clone', configuring:'st-conf', pending:'st-pend' };
+
+// ── Icon system — consistent SVG icons everywhere ────────────────────────────
+const IC = {
+  vm:       `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>`,
+  host:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+  org:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+  plus:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  edit:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  trash:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>`,
+  deploy:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  abort:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+  start:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+  stop:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+  reboot:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`,
+  shutdown: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>`,
+  console:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+  rdp:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  link:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
+  export:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+  import_:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  save:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
+  refresh:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>`,
+  user:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  key:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`,
+  logout:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  template: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>`,
+  check:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+};
+// Helper: icon + label
+const btn = (icon, label) => `<span style="display:inline-flex;align-items:center;gap:5px">${IC[icon]||''}${label}</span>`;
 
 // ── State ────────────────────────────────────────────────────────────────────
 let S = {
@@ -683,7 +715,7 @@ function renderTree(qv = '') {
     hdr.className = `tr-org-row${org.id===S.selOrg?' sel':''}`;
     hdr.innerHTML = `
       <svg class="tr-chv${open?' open':''}" id="ochv-${org.id}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
-      <span style="font-size:13px">🏢</span>
+      <span style="display:flex;align-items:center;color:var(--purple)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
       <span class="tr-org-name">${org.name}</span>
       <span class="tr-cnt" style="background:${orgRun?'rgba(62,207,93,.12)':'rgba(167,139,250,.1)'};color:${orgRun?'var(--green)':'var(--purple)'}">${orgRun}/${orgVms.length}</span>`;
     hdr.onclick = () => clickOrg(org.id);
@@ -767,9 +799,9 @@ function showOrgDetail(id) {
   $('dp').classList.add('open');
   $('dp-body').innerHTML = `
     <div class='dp-head'>
-      <div class='dp-hic' style='background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);font-size:14px'>🏢</div>
+      <div class='dp-hic' style='background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);display:flex;align-items:center;justify-content:center;color:var(--purple)'><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
       <div style='flex:1'><div class='dp-htitle'>${org.name}</div><div class='dp-hsub'>${org.description||'No description'}</div></div>
-      <button class='dp-x' onclick='closeDetail()'>✕</button>
+      <button class='dp-x' onclick='closeDetail()'><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class='dp-sec'>
       <div class='dp-sec-title'>Overview</div>
@@ -788,10 +820,10 @@ function showOrgDetail(id) {
     </div>` : ''}
     <div class='dp-actions'>
       ${canAdmin ? `
-        <button class='btn btn-a btn-fw' onclick="openModal('add-host-to-org','${org.id}')">+ Add Host to Org</button>
-        <button class='btn btn-g btn-fw' onclick="openModal('edit-org','${org.id}')">✏ Edit Organisation</button>
+        <button class='btn btn-a btn-fw' onclick="openModal('add-host-to-org','${org.id}')" style='display:inline-flex;align-items:center;justify-content:center;gap:6px'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='8' rx='2'/><rect x='2' y='14' width='20' height='8' rx='2'/><line x1='6' y1='6' x2='6.01' y2='6'/><line x1='6' y1='18' x2='6.01' y2='18'/></svg> Add Host to Org</button>
+        <button class='btn btn-g btn-fw' onclick="openModal('edit-org','${org.id}')" style='display:inline-flex;align-items:center;justify-content:center;gap:6px'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7'/><path d='M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z'/></svg> Edit Organisation</button>
         <div class='sep'></div>
-        <button class='btn btn-d btn-fw' onclick="delOrg('${org.id}')">🗑 Delete Organisation</button>
+        <button class='btn btn-d btn-fw' onclick="delOrg('${org.id}')" style='display:inline-flex;align-items:center;justify-content:center;gap:6px'><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'/></svg> Delete Organisation</button>
       ` : ''}
     </div>`;
 }
@@ -851,7 +883,7 @@ function showVmDetail(id) {
     <div class="dp-head">
       <div class="dp-hic" style="background:${r.bg}">${r.icon||'□'}</div>
       <div style="flex:1;overflow:hidden"><div class="dp-htitle">${v.hostname}</div><div class="dp-hsub">${r.label}</div></div>
-      <button class="dp-x" onclick="closeDetail()">✕</button>
+      <button class="dp-x" onclick="closeDetail()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="dp-sec">
       <div class="dp-sec-title">Status</div>
@@ -864,10 +896,10 @@ function showVmDetail(id) {
     ${canEdit && v.vmid ? `<div class="dp-sec">
       <div class="dp-sec-title">Power</div>
       <div class="power-row">
-        <button class="btn btn-power btn-start" onclick="powerAction('${v.id}','start')">▶ Start</button>
-        <button class="btn btn-power btn-stop" onclick="powerAction('${v.id}','stop')">■ Stop</button>
-        <button class="btn btn-power btn-reboot" onclick="powerAction('${v.id}','reboot')">↺ Reboot</button>
-        <button class="btn btn-power btn-stop" onclick="powerAction('${v.id}','shutdown')">⏻ Shutdown</button>
+        <button class="btn btn-power btn-start" onclick="powerAction('${v.id}','start')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start</button>
+        <button class="btn btn-power btn-stop" onclick="powerAction('${v.id}','stop')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> Stop</button>
+        <button class="btn btn-power btn-reboot" onclick="powerAction('${v.id}','reboot')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> Reboot</button>
+        <button class="btn btn-power btn-stop" onclick="powerAction('${v.id}','shutdown')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg> Shutdown</button>
       </div>
     </div>` : ''}
     <div class="dp-sec">
@@ -891,9 +923,9 @@ function showVmDetail(id) {
       ${v.vmid ? `<div class="dp-row"><span class="dp-k">VMID</span><span class="dp-v">${v.vmid}</span></div>` : ''}
     </div>
     <div class="dp-actions">
-      ${consoleUrl ? `<a href="${consoleUrl}" target="_blank" class="btn btn-console btn-fw">🖥 Open Console</a>` : ''}
-      <button class="btn btn-rdp btn-fw" onclick="downloadRdp('${v.id}','${v.hostname}')">⬇ Download .rdp</button>
-      ${canEdit ? `<button class="btn btn-g btn-fw" onclick="openModal('edit-vm','${v.id}')">✏ Edit</button><div class="sep"></div><button class="btn btn-d btn-fw" onclick="delVm('${v.id}')">🗑 Remove</button>` : ''}
+      ${consoleUrl ? `<a href="${consoleUrl}" target="_blank" class="btn btn-console btn-fw" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> Open Console</a>` : ''}
+      <button class="btn btn-rdp btn-fw" onclick="downloadRdp('${v.id}','${v.hostname}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download .rdp</button>
+      ${canEdit ? `<button class="btn btn-g btn-fw" onclick="openModal('edit-vm','${v.id}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button><div class="sep"></div><button class="btn btn-d btn-fw" onclick="delVm('${v.id}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg> Remove</button>` : ''}
     </div>`;
 }
 
@@ -909,7 +941,7 @@ function showHostDetail(id) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
       </div>
       <div style="flex:1"><div class="dp-htitle">${h.name}</div><div class="dp-hsub">${h.host} · ${h.node}</div></div>
-      <button class="dp-x" onclick="closeDetail()">✕</button>
+      <button class="dp-x" onclick="closeDetail()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="dp-sec">
       <div class="dp-sec-title">Connection</div>
@@ -926,8 +958,8 @@ function showHostDetail(id) {
       <div class="dp-row"><span class="dp-k">Running</span><span class="dp-v" style="color:var(--green)">${run}</span></div>
     </div>
     <div class="dp-actions">
-      <a href="https://${h.host}:8006" target="_blank" class="btn btn-g btn-fw">🔗 Open Proxmox UI</a>
-      ${canEdit ? `<button class="btn btn-g btn-fw" onclick="openModal('edit-host','${h.id}')">✏ Edit Host</button><div class="sep"></div><button class="btn btn-d btn-fw" onclick="delHost('${h.id}')">🗑 Remove Host</button>` : ''}
+      <a href="https://${h.host}:8006" target="_blank" class="btn btn-g btn-fw" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Open Proxmox UI</a>
+      ${canEdit ? `<button class="btn btn-g btn-fw" onclick="openModal('edit-host','${h.id}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit Host</button><div class="sep"></div><button class="btn btn-d btn-fw" onclick="delHost('${h.id}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg> Remove Host</button>` : ''}
     </div>`;
 }
 
@@ -1031,7 +1063,7 @@ async function abortDeploy() {
     const data = await api('POST', '/api/deploy/abort', {});
     toast(data.cleaning?.length ? `Aborting — deleting ${data.cleaning.length} VM(s)…` : 'Deploy aborted', false);
   } catch(e) { toast(e.message); }
-  $('abort-btn').disabled = false; $('abort-btn').textContent = '✕ Abort';
+  $('abort-btn').disabled = false; $('abort-btn').textContent = 'Abort';
   stopDeploy();
 }
 
@@ -1100,11 +1132,11 @@ async function loadTemplates() {
           <span class="tmpl-m">${new Date(t.created).toLocaleDateString()}</span>
         </div>
         <div class="tmpl-actions">
-          <button class="btn btn-a btn-sm" onclick="applyTemplate('${t.id}')">⚡ Use</button>
-          <button class="btn btn-g btn-sm" onclick="exportTemplate('${t.id}','${t.name}')">↓ Export</button>
+          <button class="btn btn-a btn-sm" onclick="applyTemplate('${t.id}')" style="display:inline-flex;align-items:center;gap:4px"><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/></svg> Use</button>
+          <button class="btn btn-g btn-sm" onclick="exportTemplate('${t.id}','${t.name}')" style="display:inline-flex;align-items:center;gap:4px"><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg> Export</button>
           ${canEdit&&(S.session?.role==='admin'||t.owner===S.session?.username)?`
-            <button class="btn btn-g btn-sm" onclick="openModal('edit-template','${t.id}')">✏</button>
-            <button class="btn btn-d btn-sm" onclick="delTemplate('${t.id}')">🗑</button>
+            <button class="btn btn-g btn-sm" onclick="openModal('edit-template','${t.id}')" title='Edit' style='display:inline-flex;align-items:center;gap:3px'><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7'/><path d='M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z'/></svg></button>
+            <button class="btn btn-d btn-sm" onclick="delTemplate('${t.id}')" title='Delete' style='display:inline-flex;align-items:center;gap:3px'><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'/></svg></button>
           `:''}
         </div>
       </div>`).join('');
@@ -1165,14 +1197,14 @@ async function loadOrgs() {
       const orgHosts = S.hosts.filter(h=>h.orgId===org.id);
       const d = org.defaults||{};
       return `<div style='padding:11px 13px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:10px'>
-        <span style='font-size:18px'>🏢</span>
+        <span style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.25);border-radius:6px;color:var(--purple)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
         <div style='flex:1'>
           <div style='font-weight:600;font-size:12.5px'>${org.name}</div>
           <div style='font-size:11px;color:var(--text2)'>${org.description||''}</div>
           <div style='font-size:10px;color:var(--text3);margin-top:2px'>${orgHosts.length} host${orgHosts.length!==1?'s':''} · ${d.gateway?'gw:'+d.gateway+' ':''} ${d.vlan?'vlan:'+d.vlan+' ':''} ${d.storage?d.storage:''}</div>
         </div>
-        <button class='btn btn-g btn-sm' onclick='openModal("edit-org","${org.id}")'>✏</button>
-        <button class='btn btn-d btn-sm' onclick='delOrg("${org.id}")'>🗑</button>
+        <button class='btn btn-g btn-sm' onclick='openModal("edit-org","${org.id}")' style='display:inline-flex;align-items:center;justify-content:center;gap:4px'><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
+        <button class='btn btn-d btn-sm' onclick='delOrg("${org.id}")' title='Delete' style='display:inline-flex;align-items:center'><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'/></svg></button>
       </div>`;
     }).join('');
   } catch(e) { toast(e.message); }
@@ -1187,8 +1219,8 @@ async function loadUsers() {
       <td><span class="role-badge role-${u.role}">${u.role}</span></td>
       <td style="font-size:11px;color:var(--text3)">${u.added ? new Date(u.added).toLocaleDateString() : '—'}</td>
       <td style="text-align:right">
-          <button class="btn btn-g btn-sm" onclick="openModal('edit-user','${u.username}')">✏</button>
-        ${u.username!==S.session?.username ? `<button class="btn btn-d btn-sm" style="margin-left:4px" onclick="removeUser('${u.username}')">🗑</button>` : ''}
+          <button class="btn btn-g btn-sm" onclick="openModal('edit-user','${u.username}')" title='Edit' style='display:inline-flex;align-items:center'><svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7'/><path d='M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z'/></svg></button>
+        ${u.username!==S.session?.username ? `<button class="btn btn-d btn-sm" style="margin-left:4px;display:inline-flex;align-items:center" onclick="removeUser('${u.username}')" title="Remove"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></button>` : ''}
       </td>
     </tr>`).join('');
   } catch(e) { toast(e.message); }
@@ -1274,7 +1306,7 @@ function openModal(type, id, fromCurrentConfig) {
   if (type==='user-menu') {
     $('modal-title').textContent = S.session?.username||'';
     $('modal-body').innerHTML = `<p style="font-size:12px;color:var(--text2);margin-bottom:12px">Signed in as <strong>${S.session?.username}</strong> (${S.session?.role})</p>`;
-    $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal();openModal('change-password')">🔑 Change Password</button><button class="btn btn-d" onclick="doLogout()">Sign out</button>`;
+    $('modal-foot').innerHTML = `<button class="btn btn-g" style="display:inline-flex;align-items:center;gap:6px" onclick="closeModal();openModal('change-password')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> Change Password</button><button class="btn btn-d" style="display:inline-flex;align-items:center;gap:6px" onclick="doLogout()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Sign out</button>`;
     return;
   }
 
@@ -1435,7 +1467,7 @@ function openModal(type, id, fromCurrentConfig) {
               <span style="font-family:var(--mono);font-size:11.5px;flex:1">${v.hostname}</span>
               <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${v.ip}</span>
               <span style="font-size:10px;color:var(--text2);min-width:90px">${ROLES[v.role]?.label||v.role}</span>
-              <button class="btn btn-d btn-sm" style="padding:2px 7px" onclick="_tmplRemove(${i})">✕</button>
+              <button class="btn btn-d btn-sm" style="padding:2px 7px" onclick="_tmplRemove(${i})"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>`).join('')
         : '<div style="color:var(--text3);font-size:12px;padding:8px 0">No VMs — add some below</div>';
     };
@@ -1461,7 +1493,7 @@ function openModal(type, id, fromCurrentConfig) {
           <div class="ff" style="margin-bottom:0"><label>IP Address</label><input id="tadd-ip" autocomplete="off" placeholder="172.16.10.11"></div>
         </div>
         <div class="ff" style="margin-bottom:8px"><label>Role</label><select id="tadd-role">${roleOpts}</select></div>
-        <button class="btn btn-g btn-fw" onclick="_tmplAdd()">+ Add VM to template</button>
+        <button class="btn btn-g btn-fw" onclick="_tmplAdd()" style="display:inline-flex;align-items:center;justify-content:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add VM to template</button>
       </div>`;
     renderTmplVmList();
     if (isEdit) {
@@ -1700,7 +1732,7 @@ async function initApp() {
   if (deployPh && !$('btn-save-tmpl')) {
     const btn = document.createElement('button');
     btn.id='btn-save-tmpl'; btn.className='btn btn-g btn-sm';
-    btn.textContent='💾 Save as Template'; btn.onclick=()=>openModal('new-template');
+    btn.innerHTML='<span style="display:inline-flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save as Template</span>'; btn.onclick=()=>openModal('new-template');
     deployPh.insertBefore(btn, deployPh.firstChild);
   }
 
