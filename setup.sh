@@ -1751,24 +1751,52 @@ const BCRYPT_ROUNDS = 10;
 
 function hashPassword(pw) { return bcrypt.hashSync(pw, BCRYPT_ROUNDS); }
 function verifyPassword(pw, hash) {
-  // Support legacy plain-text passwords during transition
-  if (!hash.startsWith('$2')) return pw === hash;
+  if (!hash) return false;  // no hash set — deny
+  if (!hash.startsWith('$2')) return pw === hash;  // legacy plain-text
   return bcrypt.compareSync(pw, hash);
 }
 
 // Bootstrap: create default admin if no users exist
 function ensureUsers() {
   const users = loadJson(USERS_FILE, {});
+  let changed = false;
   if (Object.keys(users).length === 0) {
+    // No users at all — create default admin
     users['admin'] = {
       role: 'admin',
       passwordHash: hashPassword('admin'),
       added: new Date().toISOString(),
       mustChangePassword: true,
     };
-    saveJson(USERS_FILE, users);
+    changed = true;
     console.log('[windows-deployment] Created default admin user (password: admin) — change immediately!');
+  } else {
+    // Migrate any existing users that have no passwordHash (old PAM-based records)
+    for (const [uname, u] of Object.entries(users)) {
+      if (!u.passwordHash) {
+        // Assign a random initial password — admin must reset
+        const tempPw = require('crypto').randomBytes(8).toString('hex');
+        u.passwordHash = hashPassword(tempPw);
+        u.mustChangePassword = true;
+        u.migrated = true;
+        changed = true;
+        console.log(`[windows-deployment] Migrated user '${uname}' — temp password: ${tempPw} (please reset via UI)`);
+      }
+    }
+    // Also ensure there is at least one admin
+    const hasAdmin = Object.values(users).some(u => u.role === 'admin');
+    if (!hasAdmin) {
+      users['admin'] = {
+        role: 'admin',
+        passwordHash: hashPassword('admin'),
+        added: new Date().toISOString(),
+        mustChangePassword: true,
+      };
+      changed = true;
+      console.log('[windows-deployment] No admin found — created default admin (password: admin)');
+    }
   }
+  if (changed) saveJson(USERS_FILE, users);
 }
 ensureUsers();
 
