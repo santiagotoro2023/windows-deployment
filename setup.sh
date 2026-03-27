@@ -1791,7 +1791,7 @@ def clone_vm(srv):
         # ── Start VM — Cloudbase-Init will apply all settings on first boot ───
         upid_start = px.nodes(node).qemu(vmid).status.start.post()
         if upid_start and isinstance(upid_start, str) and upid_start.startswith('UPID'):
-            wait_task(px, upid_start, f'{hostname} start")
+            wait_task(px, upid_start, f'{hostname} start')
         wait_running(px, vmid, hostname)
         log(f'{hostname}: DONE VMID={vmid} — Cloudbase-Init will configure on boot')
 
