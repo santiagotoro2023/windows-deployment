@@ -359,10 +359,23 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <!-- DEPLOY -->
 <div class="view" id="view-deploy">
   <div class="ph">
-    <div class="ph-l"><div class="ph-title">Deploy</div><div class="ph-sub">Clone template VMs on Proxmox, apply network config, install Windows roles</div></div>
-    <div class="ph-r" style="display:flex;gap:6px">
-      <button class="btn btn-dep" id="dep-btn" onclick="startDeploy()" style="display:inline-flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Deploy All</button>
+    <div class="ph-l"><div class="ph-title">Deploy</div><div class="ph-sub" id="dep-sub">Select an organisation to deploy</div></div>
+    <div class="ph-r" style="display:flex;gap:6px;align-items:center">
+      <select id="dep-org-sel" onchange="onDepOrgChange(this.value)" style="background:var(--panel2);border:1px solid var(--b1);color:var(--text);padding:5px 8px;border-radius:var(--rad);font-size:12px;font-family:var(--sans);min-width:180px;outline:none">
+        <option value="">- Select Organisation -</option>
+      </select>
+      <button class="btn btn-dep" id="dep-btn" onclick="startDeploy()" style="display:inline-flex;align-items:center;gap:6px" disabled><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Deploy</button>
       <button class="btn btn-abort" id="abort-btn" onclick="abortDeploy()" style="display:none;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Abort</button>
+    </div>
+  </div>
+  <!-- Admin: active deploys overview -->
+  <div id="admin-deploys-panel" style="display:none;margin-bottom:14px">
+    <div class="sc">
+      <div class="sc-head" style="justify-content:space-between">
+        <h3>Active Deployments</h3>
+        <span style="font-size:10px;color:var(--text3);font-family:var(--mono)" id="admin-dep-upd"></span>
+      </div>
+      <div class="sc-body" style="padding:0"><div id="admin-dep-list"></div></div>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 280px;gap:14px">
@@ -377,15 +390,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
           <h3>Ansible Output</h3>
           <span id="live-b" style="margin-left:auto"></span>
         </div>
-        <div class="sc-body" style="padding:7px 9px"><div id="log">// Add hosts and VMs, then click ⚡ Deploy All
+        <div class="sc-body" style="padding:7px 9px"><div id="log">// Select an organisation and click Deploy
 </div></div>
       </div>
-      <!-- Deploy History -->
       <div class="sc">
         <div class="sc-head"><h3>Deploy History</h3><button class="btn btn-g btn-sm" style="margin-left:auto;display:inline-flex;align-items:center;gap:4px" onclick="loadHistory()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></div>
         <div class="sc-body" style="padding:0">
           <table class="hist-table" id="hist-table">
-            <thead><tr><th>Started</th><th>By</th><th>VMs</th><th>Duration</th><th>Status</th></tr></thead>
+            <thead><tr><th>Started</th><th>By</th><th>Organisation</th><th>VMs</th><th>Duration</th><th>Status</th></tr></thead>
             <tbody id="hist-body"></tbody>
           </table>
         </div>
@@ -555,7 +567,7 @@ const btn = (icon, label) => `<span style="display:inline-flex;align-items:cente
 
 // ── State ────────────────────────────────────────────────────────────────────
 let S = {
-  orgs:[], hosts:[], vms:[], selVm:null, selHost:null, selOrg:null, flt:'all', view:'overview',
+  orgs:[], hosts:[], vms:[], selVm:null, selHost:null, selOrg:null, flt:'all', view:'overview', deployOrgId:'',
   deploying:false, session:null,
   settings:{ net:'172.16.10', gw:'172.16.10.1', pfx:24, dns1:'8.8.8.8', dns2:'1.1.1.1', vlan:'', cpus:2, ram:4096, disk:75, pass:'Asdf1234!', tz:'W. Europe Standard Time', locale:'de-CH' }
 };
@@ -649,7 +661,16 @@ function setView(v, btn) {
   document.querySelectorAll('.tnb').forEach(b => b.classList.remove('act'));
   if (!btn) document.querySelectorAll('.tnb').forEach(b => { if (b.getAttribute('onclick')?.includes("'"+v+"'")) b.classList.add('act'); });
   else btn.classList.add('act');
-  if (v === 'deploy')    { renderDeploy(); loadHistory(); }
+  if (v === 'deploy') {
+    populateDepOrgSel(); renderDeploy(); loadHistory();
+    if (S.session?.role === 'admin') {
+      $('admin-deploys-panel').style.display = '';
+      pollAdminDeploys();
+      clearInterval(_adminDepInterval);
+      _adminDepInterval = setInterval(pollAdminDeploys, 5000);
+    }
+  }
+  else { clearInterval(_adminDepInterval); }
   if (v === 'templates') loadTemplates();
   if (v === 'admin')     { loadOrgs(); loadUsers(); }
   if (v === 'settings')  syncSettingsForm();
@@ -977,13 +998,40 @@ async function powerAction(vmId, action) {
 }
 
 // ── Deploy ────────────────────────────────────────────────────────────────────
+// ── Deploy org selector ────────────────────────────────────────────────────────
+function populateDepOrgSel() {
+  const sel = $('dep-org-sel'); if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">- Select Organisation -</option>'
+    + S.orgs.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+  if (cur && S.orgs.find(o=>o.id===cur)) sel.value = cur;
+  else { sel.value = ''; S.deployOrgId = ''; }
+}
+
+function onDepOrgChange(orgId) {
+  S.deployOrgId = orgId;
+  const orgHosts = S.hosts.filter(h=>h.orgId===orgId);
+  const orgVms   = S.vms.filter(v=>orgHosts.some(h=>h.id===v.hostId));
+  const btn = $('dep-btn');
+  btn.disabled = S.deploying || !orgId || !orgVms.length || !orgHosts.length;
+  const org = S.orgs.find(o=>o.id===orgId);
+  $('dep-sub').textContent = org
+    ? `${org.name} · ${orgHosts.length} host${orgHosts.length!==1?'s':''} · ${orgVms.length} VM${orgVms.length!==1?'s':''}`
+    : 'Select an organisation to deploy';
+  renderDeploy();
+}
+
 function renderDeploy() {
-  const ordered = ROLE_ORDER.flatMap(role => S.vms.filter(v => v.role===role));
+  const orgId    = S.deployOrgId || '';
+  const orgHosts = S.hosts.filter(h=>h.orgId===orgId);
+  const orgVms   = S.vms.filter(v=>orgHosts.some(h=>h.id===v.hostId));
+  const ordered  = ROLE_ORDER.flatMap(role => orgVms.filter(v=>v.role===role));
+
   $('q-ct').textContent = ordered.length + ' VMs';
   $('dep-steps').innerHTML = ordered.length ? ordered.map((v,i) => {
     const r=ROLES[v.role]||{}; const s=ST[v.status]||ST.pending;
     const cls=v.status==='running'?'done':['cloning','configuring'].includes(v.status)?'active':'pend';
-    const tick=v.status==='running'?'✓':['cloning','configuring'].includes(v.status)?'…':(i+1);
+    const tick=v.status==='running'?'✓':['cloning','configuring'].includes(v.status)?'...':(i+1);
     return `<div class="step ${cls}">
       <div class="step-dc">
         <div class="step-dot">${tick}</div>
@@ -995,35 +1043,42 @@ function renderDeploy() {
       </div>
       <span class="pill" style="background:${s.c}15;color:${s.c};align-self:flex-start;margin-top:2px">${s.l}</span>
     </div>`;
-  }).join('') : '<div class="empty"><p>No VMs defined</p></div>';
+  }).join('') : `<div class="empty"><p>${orgId ? 'No VMs in this organisation' : 'Select an organisation above'}</p></div>`;
 
   $('role-order').innerHTML = ROLE_ORDER.map((role,i) => {
-    const r=ROLES[role]||{}; const n=S.vms.filter(v=>v.role===role).length;
+    const r=ROLES[role]||{}; const n=orgVms.filter(v=>v.role===role).length;
     return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--b1)${i===ROLE_ORDER.length-1?';border:none':''}">
       <span style="font-family:var(--mono);font-size:9px;color:var(--text3);width:11px;text-align:right">${i+1}</span>
       <span style="font-size:11px">${r.icon}</span>
       <span style="font-size:11.5px;flex:1">${r.label}</span>
-      ${n?`<span class="pill" style="background:${r.bg};color:${r.color}">${n}</span>`:`<span style="font-size:10px;color:var(--text3)">—</span>`}
+      ${n?`<span class="pill" style="background:${r.bg};color:${r.color}">${n}</span>`:`<span style="font-size:10px;color:var(--text3)">--</span>`}
     </div>`;
   }).join('');
 }
 
 let _pollInterval = null;
+
 async function startDeploy() {
   if (S.deploying) return;
-  if (!S.hosts.length) { toast('No Proxmox hosts configured'); return; }
-  if (!S.vms.length)   { toast('No VMs defined'); return; }
+  const orgId = S.deployOrgId;
+  if (!orgId) { toast('Select an organisation first'); return; }
+  const orgHosts = S.hosts.filter(h=>h.orgId===orgId);
+  const orgVms   = S.vms.filter(v=>orgHosts.some(h=>h.id===v.hostId));
+  if (!orgHosts.length) { toast('No hosts in this organisation'); return; }
+  if (!orgVms.length)   { toast('No VMs in this organisation'); return; }
+
   S.deploying = true; $('dep-btn').disabled = true;
   $('live-b').innerHTML = '<span style="font-size:10px;color:var(--amber);font-family:var(--mono);animation:blink .8s infinite">● STARTING</span>';
-  $('log').textContent = '[windows-deployment] Sending deploy request…\n';
+  $('log').textContent = '[windows-deployment] Sending deploy request...\n';
   try {
-    const res = await api('POST', '/api/deploy', {});
+    const res = await api('POST', '/api/deploy', { orgId });
     if (!res.success) { toast(res.error||'Deploy failed'); stopDeploy(); return; }
   } catch(e) { toast(e.message); stopDeploy(); return; }
   $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono);animation:blink .8s infinite">● LIVE</span>';
   $('deploy-status-bar').classList.add('visible');
+  $('dsb-text').textContent = 'Deploy running...';
   $('abort-btn').style.display = '';
-  S.vms.forEach(v => { v.status='cloning'; v.prog=0; });
+  orgVms.forEach(v => { v.status='cloning'; v.prog=0; });
   renderGrid(); renderTree(q());
   _pollInterval = setInterval(pollDeployStatus, 1500);
 }
@@ -1045,13 +1100,14 @@ async function pollDeployStatus() {
         $('dsb-text').textContent = 'Deploy finished';
       }
       stopDeploy(); loadHistory();
-    } else { $('dsb-text').textContent = 'Deploy running…'; }
+    } else { $('dsb-text').textContent = 'Deploy running...'; }
   } catch(_) {}
 }
 
 function stopDeploy() {
-  S.deploying = false; $('dep-btn').disabled = false;
-  $('dep-btn').style.display = ''; $('abort-btn').style.display = 'none';
+  S.deploying = false;
+  $('dep-btn').disabled = !S.deployOrgId;
+  $('abort-btn').style.display = 'none';
   clearInterval(_pollInterval);
   setTimeout(() => $('deploy-status-bar').classList.remove('visible'), 3000);
   setTimeout(pollVmStatus, 2000);
@@ -1060,12 +1116,12 @@ function stopDeploy() {
 async function abortDeploy() {
   if (!S.deploying) return;
   if (!confirm('Abort deployment? All VMs created so far will be deleted from Proxmox.')) return;
-  $('abort-btn').disabled = true; $('abort-btn').textContent = 'Aborting…';
+  $('abort-btn').disabled = true;
   try {
     const data = await api('POST', '/api/deploy/abort', {});
-    toast(data.cleaning?.length ? `Aborting — deleting ${data.cleaning.length} VM(s)…` : 'Deploy aborted', false);
+    toast(data.cleaning?.length ? `Aborting -- deleting ${data.cleaning.length} VM(s)...` : 'Deploy aborted', false);
   } catch(e) { toast(e.message); }
-  $('abort-btn').disabled = false; $('abort-btn').textContent = 'Abort';
+  $('abort-btn').disabled = false;
   stopDeploy();
 }
 
@@ -1074,20 +1130,60 @@ async function loadHistory() {
   try {
     const hist = await api('GET', '/api/deploy/history');
     const tbody = $('hist-body');
-    if (!hist.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text3)">No deploys yet</td></tr>'; return; }
+    if (!hist.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text3)">No deploys yet</td></tr>'; return; }
     tbody.innerHTML = hist.map(h => {
       const start = new Date(h.startedAt);
-      const dur = h.finishedAt ? Math.round((new Date(h.finishedAt)-start)/1000) + 's' : '—';
+      const dur = h.finishedAt ? Math.round((new Date(h.finishedAt)-start)/1000) + 's' : '--';
       const ok = h.exitCode === 0;
       return `<tr>
         <td style="font-family:var(--mono);font-size:11px">${start.toLocaleDateString()} ${start.toLocaleTimeString()}</td>
-        <td>${h.startedBy||'—'}</td>
-        <td>${h.vmCount||'—'}</td>
+        <td>${h.startedBy||'--'}</td>
+        <td>${h.orgName||h.orgId||'--'}</td>
+        <td>${h.vmCount||'--'}</td>
         <td style="font-family:var(--mono)">${dur}</td>
         <td><span class="pill" style="background:${ok?'var(--green-d)':'var(--red-d)'};color:${ok?'var(--green)':'var(--red)'}">${ok?'✓ Success':'✗ Failed'}</span></td>
       </tr>`;
     }).join('');
   } catch(_) {}
+}
+
+// ── Admin: all active deploys overview ────────────────────────────────────────
+let _adminDepInterval = null;
+async function pollAdminDeploys() {
+  if (S.session?.role !== 'admin') return;
+  try {
+    const all = await api('GET', '/api/deploy/all');
+    const panel = $('admin-deploys-panel');
+    const list  = $('admin-dep-list');
+    const upd   = $('admin-dep-upd');
+    if (!panel) return;
+    panel.style.display = all.length ? '' : 'none';
+    if (upd) upd.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    list.innerHTML = all.map(d => {
+      const started = d.startedAt ? new Date(d.startedAt).toLocaleTimeString() : '--';
+      const statusColor = d.running ? 'var(--amber)' : d.exitCode===0 ? 'var(--green)' : 'var(--red)';
+      const statusText  = d.running ? 'Running' : d.exitCode===0 ? 'Done' : 'Failed';
+      return `<div style="padding:10px 13px;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="font-weight:600;font-size:12.5px;font-family:var(--mono)">${d.username}</div>
+          <div style="font-size:11px;color:var(--text2)">${d.orgName||d.orgId||'--'}</div>
+          <div style="font-size:10px;color:var(--text3);margin-left:auto">started ${started}</div>
+          <span class="pill" style="background:${statusColor}18;color:${statusColor}">${statusText}</span>
+          ${d.running?`<button class="btn btn-d btn-sm" style="padding:2px 8px;font-size:11px" onclick="adminAbortDeploy('${d.username}')">Abort</button>`:''}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">
+          ${(d.vms||[]).map(v=>{const r=ROLES[v.role]||{};return`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;background:var(--panel2);border:1px solid var(--b1);border-radius:var(--rad);font-size:11px;font-family:var(--mono)">${r.icon||'□'} ${v.hostname} <span style="color:var(--text3)">${v.ip}</span></span>`;}).join('')}
+        </div>
+        ${d.logTail?`<div style="margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3);background:var(--panel2);padding:5px 7px;border-radius:var(--rad);max-height:60px;overflow:hidden;white-space:pre-wrap">${d.logTail.slice(-300)}</div>`:''}
+      </div>`;
+    }).join('');
+  } catch(_) {}
+}
+
+async function adminAbortDeploy(username) {
+  if (!confirm(`Abort ${username}'s deployment?`)) return;
+  try { await api('POST','/api/deploy/abort-user',{username}); toast('Aborted',false); pollAdminDeploys(); }
+  catch(e) { toast(e.message); }
 }
 
 // ── VM Status Polling ──────────────────────────────────────────────────────────
@@ -1760,7 +1856,7 @@ function closeModal() { $('modal-bg').classList.remove('open'); }
 
 function renderAll() {
   renderTree(q()); renderOverview();
-  if (S.view==='deploy') renderDeploy();
+  if (S.view==='deploy') { populateDepOrgSel(); renderDeploy(); }
   if (S.view==='templates') loadTemplates();
   if (S.view==='admin') loadUsers();
   if (S.selVm) showVmDetail(S.selVm);
@@ -1784,12 +1880,14 @@ async function initApp() {
     deployPh.insertBefore(btn, deployPh.firstChild);
   }
 
+  populateDepOrgSel();
   // Restore running deploy if any
   const status = await api('GET','/api/deploy/status').catch(()=>({}));
   if (status.running) {
     S.deploying=true; $('dep-btn').disabled=true; $('abort-btn').style.display='';
     $('live-b').innerHTML='<span style="font-size:10px;color:var(--green);font-family:var(--mono);animation:blink .8s infinite">● LIVE</span>';
     $('deploy-status-bar').classList.add('visible');
+    $('dsb-text').textContent='Deploy running...';
     _pollInterval = setInterval(pollDeployStatus, 1500);
   } else if (status.log) {
     $('log').textContent = status.log;
@@ -1841,8 +1939,6 @@ const DATA         = path.join(__dirname, 'data', 'config.json');
 const USERS_FILE   = path.join(__dirname, 'data', 'users.json');
 const TEMPLATES_FILE = path.join(__dirname, 'data', 'templates.json');
 const SESSIONS_FILE  = path.join(__dirname, 'data', 'sessions.json');
-const DEPLOY_STATE_FILE = path.join(__dirname, 'data', 'deploy_state.json');
-const DEPLOY_HIST_FILE  = path.join(__dirname, 'data', 'deploy_history.json');
 const ORGS_FILE         = path.join(__dirname, 'data', 'organisations.json');
 const INV  = path.join(__dirname, '../ansible/inventory/hosts.ini');
 const ADIR = path.join(__dirname, '../ansible');
@@ -2284,54 +2380,132 @@ app.get('/api/vms/:id/rdp', auth('readonly'), (req, res) => {
 });
 
 // ── Deploy history ─────────────────────────────────────────────────────────────
+// ── Per-user deploy sessions ─────────────────────────────────────────────────
+// Map: username -> { running, log, exitCode, proc, vmids, startedAt, orgId, orgName, vms }
+const deploys = new Map();
+const DEPLOY_HIST_FILE = path.join(__dirname, 'data', 'deploy_history.json');
+
+// Restore persisted sessions on startup
+(function restoreDeploys() {
+  const f = path.join(__dirname, 'data', 'deploys.json');
+  try {
+    const saved = JSON.parse(fs.readFileSync(f, 'utf8'));
+    for (const [user, s] of Object.entries(saved)) {
+      if (s.running) s.log += '\n[restarted -- deploy reset]\n';
+      s.running = false; s.proc = null;
+      deploys.set(user, s);
+    }
+  } catch(_) {}
+})();
+
+function persistDeploys() {
+  const f = path.join(__dirname, 'data', 'deploys.json');
+  const out = {};
+  for (const [user, s] of deploys) {
+    out[user] = { running: s.running, log: s.log, exitCode: s.exitCode,
+                  vmids: s.vmids, startedAt: s.startedAt,
+                  orgId: s.orgId, orgName: s.orgName, vms: s.vms };
+  }
+  try { fs.writeFileSync(f, JSON.stringify(out)); } catch(_) {}
+}
+
+function getOrInitDeploy(username) {
+  if (!deploys.has(username)) {
+    deploys.set(username, { running:false, log:'', exitCode:0, proc:null,
+                             vmids:[], startedAt:null, orgId:'', orgName:'', vms:[] });
+  }
+  return deploys.get(username);
+}
+
 function appendHistory(entry) {
   const hist = loadJson(DEPLOY_HIST_FILE, []);
   hist.unshift({ ...entry, id: Date.now().toString() });
-  saveJson(DEPLOY_HIST_FILE, hist.slice(0, 50)); // keep last 50
+  saveJson(DEPLOY_HIST_FILE, hist.slice(0, 100));
 }
 
+// ── History ───────────────────────────────────────────────────────────────────
 app.get('/api/deploy/history', auth('readonly'), (req, res) => {
-  res.json(loadJson(DEPLOY_HIST_FILE, []));
+  const hist = loadJson(DEPLOY_HIST_FILE, []);
+  res.json(req.session.role === 'admin' ? hist : hist.filter(h => h.startedBy === req.session.username));
 });
 
-// ── Deploy ─────────────────────────────────────────────────────────────────────
-function loadDeployState() { try { return JSON.parse(fs.readFileSync(DEPLOY_STATE_FILE, 'utf8')); } catch { return { running: false, log: '', exitCode: 0 }; } }
-function saveDeployState(s) { try { fs.writeFileSync(DEPLOY_STATE_FILE, JSON.stringify(s)); } catch(_) {} }
-let { running, log: deployLog, exitCode: lastExitCode } = loadDeployState();
-if (running) { running = false; deployLog += '\n[restarted — deploy state reset]\n'; saveDeployState({ running, log: deployLog, exitCode: lastExitCode }); }
-let currentProc   = null;
-let deployedVmids = [];
+// ── Admin: all sessions ───────────────────────────────────────────────────────
+app.get('/api/deploy/all', auth('admin'), (req, res) => {
+  const result = [];
+  for (const [username, s] of deploys) {
+    result.push({
+      username, running: s.running, exitCode: s.exitCode,
+      startedAt: s.startedAt, orgId: s.orgId, orgName: s.orgName,
+      vmCount: s.vms?.length || 0, vms: s.vms || [],
+      logTail: (s.log || '').slice(-800),
+    });
+  }
+  res.json(result);
+});
 
+// ── Admin: abort any user ─────────────────────────────────────────────────────
+app.post('/api/deploy/abort-user', auth('admin'), (req, res) => {
+  const { username } = req.body;
+  const s = deploys.get(username);
+  if (!s?.running) return res.status(400).json({ error: 'No active deploy for that user' });
+  s.log += '\n[windows-deployment] ABORT by admin...\n';
+  if (s.proc) {
+    try { process.kill(-s.proc.pid, 'SIGTERM'); } catch(_) {}
+    try { s.proc.kill('SIGKILL'); } catch(_) {}
+    s.proc = null;
+  }
+  s.running = false; s.exitCode = 130;
+  persistDeploys();
+  res.json({ success: true });
+});
+
+// ── Deploy (scoped per user + org) ────────────────────────────────────────────
 app.post('/api/deploy', auth('deploy'), (req, res) => {
-  if (running) return res.status(409).json({ error: 'Deploy already running' });
-  const c = load();
-  if (!c.hosts?.length) return res.status(400).json({ error: 'No Proxmox hosts configured' });
-  if (!c.vms?.length)   return res.status(400).json({ error: 'No VMs configured' });
+  const username = req.session.username;
+  const session  = getOrInitDeploy(username);
+  if (session.running) return res.status(409).json({ error: 'You already have a deploy running' });
 
-  const s = c.settings || {};
-  const h = c.hosts[0];
-  // Resolve org defaults for this host
+  const { orgId } = req.body;
+  if (!orgId) return res.status(400).json({ error: 'orgId required' });
+
+  const c    = load();
   const orgs = loadJson(ORGS_FILE, []);
-  const hostOrg = orgs.find(o => o.id === h.orgId);
-  const od = hostOrg?.defaults || {};  // org defaults
-  // Helper: pick first non-empty value from candidates
-  const pick = (...vals) => vals.find(v => v !== undefined && v !== null && v !== '') || '';
-  const ROLE_ORDER = ['dc','fileserver','backupserver','rds_broker','rds_sessionhost','printserver','mgmt'];
-  const activeRoles = ROLE_ORDER.filter(role => c.vms.some(v => v.role === role));
+  const org  = orgs.find(o => o.id === orgId);
+  if (!org) return res.status(400).json({ error: 'Organisation not found' });
 
-  let ini = `# Generated by windows-deployment ${new Date().toISOString()}\n`;
+  const orgHosts = (c.hosts || []).filter(h => h.orgId === orgId);
+  if (!orgHosts.length) return res.status(400).json({ error: 'No hosts in this organisation' });
+
+  const orgVms = (c.vms || []).filter(v => orgHosts.some(h => h.id === v.hostId));
+  if (!orgVms.length) return res.status(400).json({ error: 'No VMs in this organisation' });
+
+  const s   = c.settings || {};
+  const od  = org.defaults || {};
+  const h   = orgHosts[0];
+  const pick = (...vals) => vals.find(v => v !== undefined && v !== null && v !== '') || '';
+
+  const ROLE_ORDER = ['dc','fileserver','backupserver','rds_broker','rds_sessionhost','printserver','mgmt'];
+  const activeRoles = ROLE_ORDER.filter(role => orgVms.some(v => v.role === role));
+
+  const safeUser = username.replace(/[^a-z0-9_]/gi, '_');
+  const invFile  = path.join(ADIR, 'inventory', `hosts_${safeUser}.ini`);
+  const vmidFile = path.join(ADIR, 'inventory', `_vmids_${safeUser}.json`);
+  const evFile   = path.join(ADIR, 'inventory', `_extra_${safeUser}.json`);
+
+  let ini = `# Deploy by ${username} -- org: ${org.name}\n`;
   ini += `[windows:children]\n${activeRoles.join('\n')}\n\n`;
   activeRoles.forEach(role => {
-    const members = c.vms.filter(v => v.role === role);
     ini += `[${role}]\n`;
-    members.forEach(v => ini += `${v.hostname} ansible_host=${v.ip}\n`);
+    orgVms.filter(v => v.role === role).forEach(v => ini += `${v.hostname} ansible_host=${v.ip}\n`);
     ini += '\n';
   });
-  const resolvedPass    = pick(od.pass, s.pass, 'Asdf1234!');
-  const resolvedGw      = pick(h.defaultGateway, od.gateway, '172.16.10.1');
-  const resolvedPfx     = pick(h.subnetPfx, od.pfx, 24);
-  const resolvedDns1    = pick(h.dns1, od.dns1, '8.8.8.8');
-  const resolvedDns2    = pick(h.dns2, od.dns2, '1.1.1.1');
+
+  const resolvedPass = pick(od.pass, s.pass, 'Asdf1234!');
+  const resolvedGw   = pick(od.gateway, '172.16.10.1');
+  const resolvedPfx  = pick(od.pfx, 24);
+  const resolvedDns1 = pick(od.dns1, '8.8.8.8');
+  const resolvedDns2 = pick(od.dns2, '1.1.1.1');
+
   ini += `[windows:vars]
 ansible_user=Administrator
 ansible_password=${resolvedPass}
@@ -2347,9 +2521,10 @@ dns_secondary=${resolvedDns2}
 win_timezone=${s.tz||'W. Europe Standard Time'}
 win_locale=${s.locale||'de-CH'}
 `;
-  fs.writeFileSync(INV, ini);
+  fs.writeFileSync(invFile, ini);
+  try { fs.writeFileSync(vmidFile, '[]'); } catch(_) {}
 
-  const serversJson = c.vms.map(v => ({
+  const serversJson = orgVms.map(v => ({
     hostname: v.hostname, ip: v.ip, cpus: v.cpus||2, ram: v.ram||4096, disk: v.disk||75, role: v.role,
     vlan: pick(v.vlan, h.defaultVlan, od.vlan, ''),
     bridge: pick(v.bridge, h.bridge, od.bridge, 'vmbr0'),
@@ -2361,81 +2536,83 @@ win_locale=${s.locale||'de-CH'}
     proxmox_storage: pick(h.storage, od.storage, 'local-lvm'),
     proxmox_bridge: pick(h.bridge, od.bridge, 'vmbr0'),
     proxmox_token_id: h.tokenId, proxmox_token_secret: h.tokenSecret,
-    win_admin_pass: pick(od.pass, s.pass, 'Asdf1234!'),
-    network_gateway: pick(h.defaultGateway, od.gateway, '172.16.10.1'),
-    network_prefix_length: pick(h.subnetPfx, od.pfx, 24),
-    dns_primary: pick(h.dns1, od.dns1, '8.8.8.8'),
-    dns_secondary: pick(h.dns2, od.dns2, '1.1.1.1'),
-    win_timezone: s.tz||'W. Europe Standard Time',
-    win_locale: s.locale||'de-CH',
+    win_admin_pass: resolvedPass,
+    network_gateway: resolvedGw, network_prefix_length: resolvedPfx,
+    dns_primary: resolvedDns1, dns_secondary: resolvedDns2,
+    win_timezone: s.tz||'W. Europe Standard Time', win_locale: s.locale||'de-CH',
   };
-
-  const vmidFile = path.join(ADIR, 'inventory', '_created_vmids.json');
-  try { fs.writeFileSync(vmidFile, '[]'); } catch(_) {}
-  deployedVmids = [];
-
-  const evFile = path.join(ADIR, 'inventory', '_extra_vars.json');
   fs.writeFileSync(evFile, JSON.stringify({ ...extraVars, servers: serversJson, vmid_file: vmidFile }));
 
   const deployStart = new Date().toISOString();
-  const startedBy   = req.session.username;
-  deployLog = `[windows-deployment] Deploy started by ${startedBy} at ${deployStart}\n`;
-  running = true; lastExitCode = 0;
-  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+  session.running   = true;
+  session.exitCode  = 0;
+  session.startedAt = deployStart;
+  session.orgId     = orgId;
+  session.orgName   = org.name;
+  session.vmids     = [];
+  session.vms       = orgVms.map(v => ({ hostname:v.hostname, ip:v.ip, role:v.role, orgName:org.name }));
+  session.log       = `[windows-deployment] Deploy started by ${username} -- org: ${org.name}\n`;
+  persistDeploys();
   res.json({ success: true });
 
-  const cmd = `cd "${ADIR}" && $(python3 -c "import shutil; print(shutil.which('ansible-playbook') or '/usr/local/bin/ansible-playbook')") site.yml -i inventory/hosts.ini -e "@inventory/_extra_vars.json" 2>&1`;
-  currentProc = exec(cmd);
-  const proc = currentProc;
+  const cmd = `cd "${ADIR}" && $(python3 -c "import shutil; print(shutil.which('ansible-playbook') or '/usr/local/bin/ansible-playbook')") site.yml -i inventory/hosts_${safeUser}.ini -e "@inventory/_extra_${safeUser}.json" 2>&1`;
+  const proc = exec(cmd);
+  session.proc = proc;
 
   let flushTimer = null;
-  function flushLog() { saveDeployState({ running, log: deployLog, exitCode: lastExitCode }); }
-  proc.stdout?.on('data', d => { deployLog += d; clearTimeout(flushTimer); flushTimer = setTimeout(flushLog, 500); });
-  proc.stderr?.on('data', d => { deployLog += d; clearTimeout(flushTimer); flushTimer = setTimeout(flushLog, 500); });
+  const flush = () => persistDeploys();
+  proc.stdout?.on('data', d => { session.log += d; clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); });
+  proc.stderr?.on('data', d => { session.log += d; clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); });
   proc.on('close', code => {
-    running = false; currentProc = null; lastExitCode = code;
-    try { deployedVmids = JSON.parse(fs.readFileSync(vmidFile, 'utf8')); } catch(_) {}
-    deployLog += `\n[windows-deployment] Process exited with code ${code}\n`;
-    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
-    appendHistory({ startedAt: deployStart, finishedAt: new Date().toISOString(), startedBy, exitCode: code, vmCount: c.vms.length, logSnippet: deployLog.slice(-500) });
+    session.running = false; session.proc = null; session.exitCode = code;
+    try { session.vmids = JSON.parse(fs.readFileSync(vmidFile, 'utf8')); } catch(_) {}
+    session.log += `\n[windows-deployment] Finished with exit code ${code}\n`;
+    persistDeploys();
+    appendHistory({
+      startedAt: deployStart, finishedAt: new Date().toISOString(),
+      startedBy: username, orgId, orgName: org.name,
+      exitCode: code, vmCount: orgVms.length,
+      vms: orgVms.map(v => ({ hostname:v.hostname, ip:v.ip, role:v.role })),
+    });
     try { fs.unlinkSync(evFile); } catch(_) {}
+    try { fs.unlinkSync(invFile); } catch(_) {}
   });
 });
 
 app.get('/api/deploy/status', auth('readonly'), (req, res) => {
-  res.json({ running, log: deployLog, exitCode: lastExitCode, vmids: deployedVmids });
+  const s = getOrInitDeploy(req.session.username);
+  res.json({ running: s.running, log: s.log, exitCode: s.exitCode, vmids: s.vmids });
 });
 
-app.post('/api/deploy/abort', auth('deploy'), async (req, res) => {
-  if (!running && !currentProc) return res.status(400).json({ error: 'No deploy running' });
-  deployLog += '\n[windows-deployment] ABORT requested — stopping Ansible...\n';
-  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
-  if (currentProc) {
-    try { process.kill(-currentProc.pid, 'SIGTERM'); } catch(_) {}
-    try { currentProc.kill('SIGKILL'); } catch(_) {}
-    currentProc = null;
+app.post('/api/deploy/abort', auth('deploy'), (req, res) => {
+  const username = req.session.username;
+  const s = deploys.get(username);
+  if (!s?.running) return res.status(400).json({ error: 'No deploy running' });
+  s.log += '\n[windows-deployment] ABORT requested...\n';
+  if (s.proc) {
+    try { process.kill(-s.proc.pid, 'SIGTERM'); } catch(_) {}
+    try { s.proc.kill('SIGKILL'); } catch(_) {}
+    s.proc = null;
   }
-  running = false; lastExitCode = 130;
-  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
-  const vmidFile = path.join(ADIR, 'inventory', '_created_vmids.json');
-  let vmids = []; try { vmids = JSON.parse(fs.readFileSync(vmidFile, 'utf8')); } catch(_) {}
+  s.running = false; s.exitCode = 130;
+  persistDeploys();
+
+  const vmids = s.vmids?.length ? s.vmids : [];
   if (!vmids.length) {
-    deployLog += '[windows-deployment] No VMs to clean up.\n';
-    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+    s.log += '[windows-deployment] No VMs to clean up.\n';
+    persistDeploys();
     return res.json({ success: true, cleaned: [] });
   }
-  deployLog += `[windows-deployment] Cleaning up ${vmids.length} VM(s): ${vmids.join(', ')}...\n`;
-  saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
-  const c = load(); const h = c.hosts?.[0];
-  if (!h) return res.json({ success: true, cleaned: [], note: 'No host config for cleanup' });
-  const cleanupScript = path.join(ADIR, 'pve_cleanup.py');
-  const cleanCmd = `python3 ${cleanupScript} '${h.host}' '${h.tokenId}' '${h.tokenSecret}' '${h.node}' '${vmids.join(',')}'`;
-  exec(cleanCmd, (err, stdout, stderr) => {
-    deployLog += stdout || '';
-    if (err) deployLog += `[cleanup error] ${stderr || err.message}\n`;
-    else     deployLog += '[windows-deployment] Cleanup complete.\n';
-    deployedVmids = [];
-    saveDeployState({ running, log: deployLog, exitCode: lastExitCode });
+  s.log += `[windows-deployment] Cleaning up ${vmids.length} VM(s)...\n`;
+  persistDeploys();
+  const c = load();
+  const h = c.hosts?.find(h => h.orgId === s.orgId) || c.hosts?.[0];
+  if (!h) return res.json({ success: true, cleaned: [], note: 'No host found' });
+  const cleanCmd = `python3 ${path.join(ADIR,'pve_cleanup.py')} '${h.host}' '${h.tokenId}' '${h.tokenSecret}' '${h.node}' '${vmids.join(',')}'`;
+  exec(cleanCmd, (err, stdout) => {
+    s.log += stdout || '';
+    s.log += err ? `[cleanup error] ${err.message}\n` : '[windows-deployment] Cleanup done.\n';
+    persistDeploys();
   });
   res.json({ success: true, cleaning: vmids });
 });
