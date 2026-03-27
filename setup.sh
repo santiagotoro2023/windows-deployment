@@ -308,7 +308,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   </div>
   <div id="topbar-right">
     <div class="conn-pill"><div class="cdot off" id="cdot"></div><span id="clab">No hosts</span></div>
-    <button class="btn btn-g btn-sm" onclick="openModal('host')" id="btn-add-host" style="display:none">+ Add Host</button>
     <div class="user-pill" onclick="openModal('user-menu')" id="user-pill" style="display:none">
       <span id="topbar-username"></span>
       <span class="role-badge" id="topbar-role"></span>
@@ -324,7 +323,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <input id="sb-input" placeholder="Filter…" autocomplete="off" oninput="renderTree(this.value.toLowerCase())">
     </div>
     <button class="sb-plus" onclick="openModal('vm')" title="Add VM" id="btn-add-vm">+</button>
-    <button style="width:26px;height:26px;background:rgba(167,139,250,.15);color:var(--purple);border:1px solid rgba(167,139,250,.3);border-radius:var(--rad);cursor:pointer;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0" onclick="openModal('new-org')" title="New Organisation" id="btn-add-org">🏢</button>
+    <button style="width:26px;height:26px;background:rgba(232,160,32,.12);color:var(--amber);border:1px solid rgba(232,160,32,.25);border-radius:var(--rad);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0" onclick="openModal('host')" title="Add Host" id="btn-add-host">🖥</button>
+    <button style="width:26px;height:26px;background:rgba(167,139,250,.15);color:var(--purple);border:1px solid rgba(167,139,250,.3);border-radius:var(--rad);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0" onclick="openModal('new-org')" title="New Organisation" id="btn-add-org">🏢</button>
   </div>
   <div id="tree"></div>
 </div>
