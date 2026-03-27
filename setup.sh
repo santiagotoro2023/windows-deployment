@@ -322,13 +322,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="sg-head">🌍 Network</div>
     <div class="sg-body">
       <div class="g3">
-        <div class="ff"><label>Network prefix</label><input id="s-net" autocomplete="off" value="192.168.1"></div>
-        <div class="ff"><label>Gateway</label><input id="s-gw" autocomplete="off" value="192.168.1.1"></div>
+        <div class="ff"><label>Network prefix</label><input id="s-net" autocomplete="off" value="172.16.10"></div>
+        <div class="ff"><label>Gateway</label><input id="s-gw" autocomplete="off" value="172.16.10.1"></div>
         <div class="ff"><label>Subnet</label><input type="number" id="s-pfx" autocomplete="off" value="24" min="8" max="30"></div>
       </div>
       <div class="g2">
         <div class="ff"><label>Primary DNS</label><input id="s-dns1" autocomplete="off" value="8.8.8.8"></div>
-        <div class="ff"><label>Secondary DNS</label><input id="s-dns2" autocomplete="off" value="8.8.4.4"></div>
+        <div class="ff"><label>Secondary DNS</label><input id="s-dns2" autocomplete="off" value="1.1.1.1"></div>
       </div>
     </div>
   </div>
@@ -404,7 +404,7 @@ const ST_CLS = { running:'st-run', stopped:'st-stop', cloning:'st-clone', config
 let S = {
   hosts:[], vms:[], selVm:null, selHost:null,
   flt:'all', view:'overview', deploying:false,
-  settings:{ net:'192.168.1', gw:'192.168.1.1', pfx:24, dns1:'8.8.8.8', dns2:'8.8.4.4', cpus:2, ram:4096, disk:75, pass:'Asdf1234!', tz:'W. Europe Standard Time', locale:'de-CH' }
+  settings:{ net:'172.16.10', gw:'172.16.10.1', pfx:24, dns1:'8.8.8.8', dns2:'1.1.1.1', cpus:2, ram:4096, disk:75, pass:'Asdf1234!', tz:'W. Europe Standard Time', locale:'de-CH' }
 };
 
 let _uid = 1;
@@ -467,8 +467,8 @@ function setFlt(f, btn) {
 
 function syncSettingsForm() {
   const s = S.settings;
-  $('s-net').value    = s.net    || '192.168.1';
-  $('s-gw').value     = s.gw     || '192.168.1.1';
+  $('s-net').value    = s.net    || '172.16.10';
+  $('s-gw').value     = s.gw     || '172.16.10.1';
   $('s-pfx').value    = s.pfx    || 24;
   $('s-dns1').value   = s.dns1   || '8.8.8.8';
   $('s-dns2').value   = s.dns2   || '8.8.4.4';
@@ -1190,14 +1190,14 @@ app.post('/api/deploy', (req, res) => {
 ansible_user=Administrator
 ansible_password=${s.pass||'Asdf1234!'}
 ansible_connection=winrm
-ansible_winrm_transport=ntlm
+ansible_winrm_transport=basic
 ansible_winrm_port=5985
 ansible_winrm_server_cert_validation=ignore
 ansible_winrm_scheme=http
-network_gateway=${s.gw||'192.168.1.1'}
+network_gateway=${s.gw||'172.16.10.1'}
 network_prefix_length=${s.pfx||24}
 dns_primary=${s.dns1||'8.8.8.8'}
-dns_secondary=${s.dns2||'8.8.4.4'}
+dns_secondary=${s.dns2||'1.1.1.1'}
 win_timezone=${s.tz||'W. Europe Standard Time'}
 win_locale=${s.locale||'de-CH'}
 `;
@@ -1222,7 +1222,7 @@ win_locale=${s.locale||'de-CH'}
     proxmox_token_id:      h.tokenId,
     proxmox_token_secret:  h.tokenSecret,
     win_admin_pass:        s.pass || 'Asdf1234!',
-    network_gateway:       s.gw   || '192.168.1.1',
+    network_gateway:       s.gw   || '172.16.10.1',
     network_prefix_length: s.pfx  || 24,
     dns_primary:           s.dns1 || '8.8.8.8',
     dns_secondary:         s.dns2 || '8.8.4.4',
@@ -1408,11 +1408,11 @@ EOF
 # Defaults — all overridden at runtime via _extra_vars.json
 ansible_user: Administrator
 ansible_connection: winrm
-ansible_winrm_transport: ntlm
+ansible_winrm_transport: basic
 ansible_winrm_port: 5985
 ansible_winrm_server_cert_validation: ignore
 ansible_winrm_scheme: http
-network_gateway: "192.168.1.1"
+network_gateway: "172.16.10.1"
 network_prefix_length: 24
 dns_primary: "8.8.8.8"
 dns_secondary: "8.8.4.4"
@@ -1493,49 +1493,62 @@ import os
 BASE = "/opt/windows-deployment/ansible/roles"
 
 ROLES = [
-("common/tasks/main.yml", [
-"---",
-"- name: Wait for WinRM",
-"  ansible.builtin.wait_for:",
-"    host:    '{{ ansible_host }}'",
-"    port:    5985",
-"    timeout: 600",
-"    delay:   30",
-"  delegate_to: localhost",
-"",
-"- name: Hostname, Timezone, DNS, RDP, Firewall",
-"  ansible.builtin.raw: |",
-"    $ErrorActionPreference = 'Stop'",
-"    $needReboot = $false",
-"    $desired = '{{ inventory_hostname_short }}'",
-"    if ($env:COMPUTERNAME -ne $desired) {",
-"      Rename-Computer -NewName $desired -Force",
-"      $needReboot = $true",
-"    }",
-"    Set-TimeZone -Id '{{ win_timezone }}'",
-"    $dns = @('{{ dns_primary }}', '{{ dns_secondary }}')",
-"    Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {",
-"      Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ServerAddresses $dns",
-"    }",
-r"    Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0",
-'    netsh advfirewall firewall set rule group="remote desktop" new enable=Yes',
-"    # Ensure WinRM NTLM auth is enabled",
-"    Set-Item WSMan:\\localhost\\Service\\Auth\\Ntlm -Value $true",
-"    Set-Item WSMan:\\localhost\\Service\\AllowUnencrypted -Value $true",
-"    Set-Service WinRM -StartupType Automatic",
-"    Start-Service WinRM -ErrorAction SilentlyContinue",
-"    if ($needReboot) { Restart-Computer -Force }",
-"",
-"- name: Wait for reboot",
-"  ansible.builtin.wait_for:",
-"    host:    '{{ ansible_host }}'",
-"    port:    5985",
-"    timeout: 300",
-"    delay:   30",
-"  delegate_to: localhost",
-]),
+# common role written via python3 to avoid YAML/Jinja2 quote conflicts
+# The WinRM winrm set commands use double-quotes inside — impossible in ROLESCRIPT lists.
 
-("dc/tasks/main.yml", [
+]  # close ROLES list temporarily — we write common separately below
+
+import os
+BASE = "/opt/windows-deployment/ansible/roles"
+
+common_yaml = """---
+- name: Wait for WinRM
+  ansible.builtin.wait_for:
+    host:    "{{ ansible_host }}"
+    port:    5985
+    timeout: 600
+    delay:   30
+  delegate_to: localhost
+
+- name: Configure WinRM, hostname, timezone, DNS, RDP
+  ansible.builtin.raw: |
+    $ErrorActionPreference = "Stop"
+    $needReboot = $false
+    winrm quickconfig -q -force 2>$null
+    winrm set winrm/config/service "@{AllowUnencrypted=\"true\"}" 2>$null
+    winrm set winrm/config/service/auth "@{Basic=\"true\"}" 2>$null
+    Set-Service WinRM -StartupType Automatic
+    Start-Service WinRM -ErrorAction SilentlyContinue
+    $desired = "{{ inventory_hostname_short }}"
+    if ($env:COMPUTERNAME -ne $desired) {
+      Rename-Computer -NewName $desired -Force
+      $needReboot = $true
+    }
+    Set-TimeZone -Id "{{ win_timezone }}"
+    $dns = @("{{ dns_primary }}", "{{ dns_secondary }}")
+    Get-NetAdapter | Where-Object Status -eq "Up" | ForEach-Object {
+      Set-DnsClientServerAddress -InterfaceIndex $_.InterfaceIndex -ServerAddresses $dns
+    }
+    Set-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" fDenyTSConnections 0
+    netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+    if ($needReboot) { Restart-Computer -Force }
+
+- name: Wait for reboot
+  ansible.builtin.wait_for:
+    host:    "{{ ansible_host }}"
+    port:    5985
+    timeout: 300
+    delay:   30
+  delegate_to: localhost
+"""
+
+p = os.path.join(BASE, "common/tasks/main.yml")
+os.makedirs(os.path.dirname(p), exist_ok=True)
+with open(p, "w") as fh:
+    fh.write(common_yaml)
+print("  wrote: common/tasks/main.yml")
+
+ROLES = [
 "---",
 "- name: Install Domain Controller features",
 "  ansible.builtin.raw: |",
