@@ -29,7 +29,7 @@ check_root() { [[ $EUID -eq 0 ]] || err "Run as root: sudo bash setup.sh"; }
 
 write_files() {
   inf "Writing files to ${DIR}…"
-  mkdir -p "${DIR}"/{frontend,backend/data,ansible/{roles/{common,dc,fileserver,backupserver,rds_broker,rds_sessionhost,printserver,mgmt,proxmox_provision}/tasks,group_vars,inventory},docs}
+  mkdir -p "${DIR}"/{frontend,backend/data,ansible/{roles/{common,dc,fileserver,backupserver,rds_broker,rds_sessionhost,printserver,mgmt,proxmox_provision,ad_setup}/tasks,group_vars,inventory},docs}
 
   # ---------------------------------------------------------------------------
   # frontend/index.html
@@ -188,7 +188,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .ads-h{padding:9px 13px;background:var(--panel2);border-bottom:1px solid var(--b1);font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
 .ads-b{padding:13px}
 .ck-row{display:flex;align-items:center;gap:7px;margin-bottom:7px;font-size:12px;color:var(--text)}
-.ck-row input[type=checkbox]{accent-color:var(--amber)}
+.ck-row input[type=checkbox]{width:14px;height:14px;accent-color:var(--amber);cursor:pointer;flex-shrink:0}
+input[type=checkbox]{accent-color:var(--amber)}
 .scope-card{background:var(--panel2);border:1px solid var(--b1);border-radius:var(--rad);padding:9px;margin-bottom:8px}
 
 .dp-head{padding:11px 13px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px;flex-shrink:0}
@@ -218,7 +219,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .btn-start{color:var(--green);border-color:rgba(62,207,93,.2)}.btn-start:hover{background:var(--green-d)}
 .btn-stop{color:var(--red);border-color:rgba(240,80,80,.2)}.btn-stop:hover{background:var(--red-d)}
 .btn-reboot{color:var(--blue);border-color:rgba(91,156,246,.2)}.btn-reboot:hover{background:var(--blue-d)}
-.btn-rdp{color:var(--amber);border-color:var(--amber-b)}.btn-rdp:hover{background:var(--amber-d)}
+.btn-rdp{color:var(--amber);border-color:var(--amber-b);background:transparent}.btn-rdp:hover{background:var(--amber-d)}
 .btn-console{color:var(--text2);border-color:var(--b2)}.btn-console:hover{background:var(--panel2)}
 
 .ff{margin-bottom:9px}
@@ -689,7 +690,7 @@ function toast(msg, isErr=true) {
 // ── Views ─────────────────────────────────────────────────────────────────────
 function setView(v, btn) {
   S.view = v;
-  $('view-vm-detail').style.display='none'; clearInterval(_vdResTimer); _vdId=null; S.selVm=null;
+  $('view-vm-detail').style.display='none'; $('main').style.display=''; clearInterval(_vdResTimer); _vdId=null; S.selVm=null;
   document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
   $('view-'+v).classList.add('active');
   document.querySelectorAll('.tnb').forEach(b => b.classList.remove('act'));
@@ -937,6 +938,7 @@ function showVmDetail(id) {
   const v = vb(id); if (!v) return;
   _vdId = id;
   document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+  $('main').style.display = 'none';
   $('view-vm-detail').style.display = 'flex';
   $('dp').classList.remove('open');
   document.querySelectorAll('.tnb').forEach(b => b.classList.remove('act'));
@@ -953,6 +955,7 @@ function showVmDetail(id) {
 function closeVmDetail() {
   clearInterval(_vdResTimer); _vdId = null; S.selVm = null;
   $('view-vm-detail').style.display = 'none';
+  $('main').style.display = '';
   renderTree(q()); renderGrid();
   setView('overview', null);
 }
@@ -981,6 +984,7 @@ function _vdRenderHeader(v) {
     (conUrl ? `<a href="${conUrl}" target="_blank" class="btn btn-console btn-sm" style="display:inline-flex;align-items:center;gap:5px">${svgCon} Console</a>` : '') +
     `<button class="btn btn-rdp btn-sm" onclick="downloadRdp('${v.id}','${v.hostname}')" style="display:inline-flex;align-items:center;gap:5px">${svgRdp} .rdp</button>` +
     (canEdit ? `<button class="btn btn-g btn-sm" onclick="openModal('edit-vm','${v.id}')" style="display:inline-flex;align-items:center;gap:5px">${svgEdit} Edit</button>` : '') +
+    (canEdit ? `<button class="btn btn-d btn-sm" onclick="delVm('${v.id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'/></svg> Remove</button>` : '') +
     `<button class="btn btn-g btn-sm" onclick="closeVmDetail()" style="display:inline-flex;align-items:center;gap:5px">${svgBack} Back</button>`;
 }
 
@@ -1080,7 +1084,7 @@ function _vdPaneAD(v) {
           ${inp('ad-netbios','NetBIOS',ac.netbios||(ac.domain||od.domain||'').split('.')[0]?.toUpperCase()||'','CONTOSO')}
           <div class="g2">
             <div class="ff"><label>Forest Mode</label><select id="ad-mode"${ro?' disabled':''}>${['WinThreshold','Win2016','Win2012R2'].map(m=>`<option value="${m}"${(ac.forestMode||'WinThreshold')===m?' selected':''}>${m==='WinThreshold'?'2025/2022':m}</option>`).join('')}</select></div>
-            <div class="ff"><label>Safe Mode Password</label><input id="ad-safepw" type="text" data-1p-ignore value="${ac.safeModePw||''}" placeholder="same as admin pw" autocomplete="off"${ro?' readonly':''}></div>
+            <div class="ff"><label>DSRM Password <span style='color:var(--text3);font-weight:400'>(must differ from admin pw)</span></label><input id="ad-safepw" type="text" data-1p-ignore value="${ac.safeModePw||''}" placeholder="e.g. DSRMpass123!" autocomplete="off"${ro?' readonly':''}></div>
           </div>
           <div style="border-top:1px solid var(--b1);padding-top:8px;margin-top:6px">
             ${ck('ad-primary',ac.isPrimary!==false,'Primary DC -- promote new forest')}
@@ -1114,8 +1118,7 @@ function _vdPaneAD(v) {
     </div>
     ${!ro ? `<div style="margin-top:10px;padding-top:12px;border-top:1px solid var(--b1);display:flex;gap:8px;align-items:center">
       <button class="btn btn-g" onclick="_saveAdConfig('${v.id}')" style="display:inline-flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Config</button>
-      <button class="btn btn-a" onclick="_runAdSetup('${v.id}')" style="display:inline-flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Run AD Setup on DC</button>
-      <span style="font-size:11px;color:var(--text3)">Connects via WinRM -- promotes DC, configures DNS zones and DHCP scopes</span>
+      <span style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> AD setup runs automatically during deployment — DC is promoted before other servers are deployed</span>
     </div>` : ''}
   </div>`;
 }
@@ -1160,6 +1163,10 @@ async function _saveAdConfig(vmId) {
       lease: el.querySelector('.sc-lease')?.value||'8',
     })).filter(s=>s.start&&s.end),
   };
+  // Validate DSRM password
+  if (!ac.safeModePw) { toast('DSRM Password is required'); return; }
+  const adminPw = (ob(hb(v.hostId)?.orgId)?.defaults?.pass) || '';
+  if (adminPw && ac.safeModePw === adminPw) { toast('DSRM Password must differ from the Windows Admin Password'); return; }
   try {
     await api('PUT', `/api/vms/${vmId}`, { ...v, adConfig: ac });
     const idx = S.vms.findIndex(x => x.id === vmId);
@@ -1760,7 +1767,7 @@ function openModal(type, id, fromCurrentConfig) {
       '<div class="ff"><label>Organisation</label><select id="m-org-id" onchange="_hostOrgChanged(this.value)">'
       + S.orgs.map(o=>'<option value="'+o.id+'">'+o.name+'</option>').join('')
       + '</select></div>'
-      + '<div class="ff"><label>Display Name</label><input id="m-name" autocomplete="off" placeholder="pve-main"></div>'
+      + ''
       + '<div class="g2"><div class="ff"><label>Host IP / FQDN</label><input id="m-host" autocomplete="off" placeholder="172.16.10.2"></div>'
       + '<div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="pve"></div></div>'
       + '<div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" placeholder="root@pam!deployment-token"></div>'
@@ -1772,6 +1779,8 @@ function openModal(type, id, fromCurrentConfig) {
     $('modal-foot').innerHTML =
       '<button class="btn btn-g" onclick="closeModal()">Cancel</button>'
       + '<button class="btn btn-a" onclick="saveHost()">Save Host</button>';
+    // Trigger defaults for first org
+    if (S.orgs[0]?.id) setTimeout(() => window._hostOrgChanged?.(S.orgs[0].id), 0);
     return;
   }
 
@@ -1779,7 +1788,6 @@ function openModal(type, id, fromCurrentConfig) {
     const h=hb(id); if (!h) return;
     $('modal-title').textContent = 'Edit Host — '+h.name;
     $('modal-body').innerHTML = `
-      <div class="ff"><label>Display Name</label><input id="m-name" autocomplete="off" value="${h.name}"></div>
       <div class="g2">
         <div class="ff"><label>Host IP / FQDN</label><input id="m-host" autocomplete="off" value="${h.host}"></div>
         <div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="${h.node}"></div>
@@ -1982,8 +1990,8 @@ async function changePassword() {
 }
 
 async function saveHostToOrg(orgId) {
-  const n=($('m-name').value||'').trim(), h=($('m-host').value||'').trim();
-  if (!n||!h) { toast('Name and host IP required'); return; }
+  const h=($('m-host').value||'').trim();
+  if (!h) { toast('Host IP required'); return; }
   const newHost = {
     name:n, host:h, node:$('m-node').value||'pve',
     tokenId:$('m-tokid').value, tokenSecret:$('m-toksec').value,
@@ -2009,7 +2017,8 @@ async function saveHost() {
   if (!n||!h) { toast('Name and host IP required'); return; }
   const _hostOrgId = $('m-org-id')?.value||'';
   if (!_hostOrgId) { toast('Select an organisation'); return; }
-  const newHost = { name:n, host:h, node:$('m-node').value||'pve', tokenId:$('m-tokid').value,
+  const node = $('m-node').value||'pve';
+  const newHost = { name:node, host:h, node, tokenId:$('m-tokid').value,
     tokenSecret:$('m-toksec').value, templateName:$('m-tmpl').value||'win2025-template',
     storage:$('m-stor').value||'local-lvm', bridge:$('m-bridge').value||'vmbr0',
     defaultVlan:$('m-dvlan').value||'', orgId:_hostOrgId };
@@ -2018,7 +2027,7 @@ async function saveHost() {
 
 async function saveEditHost(id) {
   const h=hb(id); if (!h) return;
-  const update = { name:$('m-name').value||h.name, host:$('m-host').value||h.host,
+  const update = { name:$('m-node').value||h.node, host:$('m-host').value||h.host,
     node:$('m-node').value||h.node, tokenId:$('m-tokid').value||h.tokenId,
     templateName:$('m-tmpl').value||h.templateName, storage:$('m-stor').value||h.storage,
     bridge:$('m-bridge').value||h.bridge, defaultVlan:$('m-dvlan').value||'' };
@@ -2036,7 +2045,7 @@ async function saveVm() {
     cpus:+$('m-cpus').value||S.settings.cpus, ram:+$('m-ram').value||S.settings.ram,
     disk:+$('m-disk').value||S.settings.disk, vlan:$('m-vlan').value||'',
     bridge:$('m-bridge-vm').value||'', domain:$('m-domain')?.value||'', status:'pending', prog:0 };
-  try { const r=await api('POST','/api/vms',vm); if (r.vm) S.vms.push(r.vm); closeModal(); renderAll(); } catch(e) { toast(e.message); }
+  try { await api('POST','/api/vms',vm); await loadState(); closeModal(); renderAll(); } catch(e) { toast(e.message); }
 }
 
 async function saveEditVm(id) {
@@ -2261,7 +2270,7 @@ const save  = (c) => saveJson(DATA, c);
 
 // ── Session store ────────────────────────────────────────────────────────────
 let sessions = loadJson(SESSIONS_FILE, {});
-const SESSION_TTL = 8 * 60 * 60 * 1000; // 8 hours
+const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 function createSession(username, role) {
   const token = crypto.randomBytes(32).toString('hex');
@@ -2802,7 +2811,28 @@ app.post('/api/deploy', auth('deploy'), (req, res) => {
   ini += `[windows:children]\n${activeRoles.join('\n')}\n\n`;
   activeRoles.forEach(role => {
     ini += `[${role}]\n`;
-    orgVms.filter(v => v.role === role).forEach(v => ini += `${v.hostname} ansible_host=${v.ip}\n`);
+    orgVms.filter(v => v.role === role).forEach(v => {
+      let hostLine = `${v.hostname} ansible_host=${v.ip}`;
+      // For DC role: embed per-host AD vars directly in inventory
+      if (v.role === 'dc') {
+        const ac = v.adConfig || {};
+        const repl  = ac.replPartner  ? (orgVms.find(vv=>vv.id===ac.replPartner)?.ip||'')  : '';
+        const foip  = ac.failPartner  ? (orgVms.find(vv=>vv.id===ac.failPartner)?.ip||'')  : '';
+        const dcDomain  = pick(ac.domain, od.domain, '');
+        const dcNetbios = pick(ac.netbios, dcDomain.split('.')[0]?.toUpperCase()||'');
+        const dcPw      = pick(ac.safeModePw, '');
+        if (dcDomain) {
+          hostLine += ` dc_domain=${dcDomain} dc_netbios=${dcNetbios} dc_forest_mode=${ac.forestMode||'WinThreshold'}`;
+          hostLine += ` dc_safe_mode_pw=${JSON.stringify(dcPw)} dc_is_primary=${ac.isPrimary!==false}`;
+          hostLine += ` dc_is_rodc=${!!ac.isRODC} dc_enable_repl=${!!ac.enableRepl}`;
+          hostLine += ` dc_repl_partner_ip=${repl} dc_dhcp_failover=${!!ac.dhcpFailover} dc_failover_ip=${foip}`;
+          hostLine += ` dc_dns_zones=${JSON.stringify(JSON.stringify(ac.dnsZones||[]))}`;
+          hostLine += ` dc_dhcp_scopes=${JSON.stringify(JSON.stringify(ac.dhcpScopes||[]))}`;
+          hostLine += ` dc_ip=${v.ip}`;
+        }
+      }
+      ini += hostLine + '\n';
+    });
     ini += '\n';
   });
 
@@ -2830,11 +2860,27 @@ win_locale=${s.locale||'de-CH'}
   fs.writeFileSync(invFile, ini);
   try { fs.writeFileSync(vmidFile, '[]'); } catch(_) {}
 
-  const serversJson = orgVms.map(v => ({
-    hostname: v.hostname, ip: v.ip, cpus: v.cpus||2, ram: v.ram||4096, disk: v.disk||75, role: v.role,
-    vlan: pick(v.vlan, h.defaultVlan, od.vlan, ''),
-    bridge: pick(v.bridge, h.bridge, od.bridge, 'vmbr0'),
-  }));
+  const serversJson = orgVms.map(v => {
+    const ac = v.adConfig || {};
+    return {
+      hostname: v.hostname, ip: v.ip, cpus: v.cpus||2, ram: v.ram||4096, disk: v.disk||75, role: v.role,
+      vlan: pick(v.vlan, h.defaultVlan, od.vlan, ''),
+      bridge: pick(v.bridge, h.bridge, od.bridge, 'vmbr0'),
+      // AD config (only used for dc role)
+      dc_domain:        pick(ac.domain, od.domain, ''),
+      dc_netbios:       pick(ac.netbios, pick(ac.domain, od.domain, '').split('.')[0]?.toUpperCase()||''),
+      dc_forest_mode:   ac.forestMode || 'WinThreshold',
+      dc_safe_mode_pw:  pick(ac.safeModePw, ''),
+      dc_is_primary:    ac.isPrimary !== false,
+      dc_is_rodc:       !!ac.isRODC,
+      dc_enable_repl:   !!ac.enableRepl,
+      dc_repl_partner:  ac.replPartner  ? (orgVms.find(vv=>vv.id===ac.replPartner)?.ip||'') : '',
+      dc_dhcp_failover: !!ac.dhcpFailover,
+      dc_failover_ip:   ac.failPartner  ? (orgVms.find(vv=>vv.id===ac.failPartner)?.ip||'')  : '',
+      dc_dns_zones:     JSON.stringify(ac.dnsZones  || []),
+      dc_dhcp_scopes:   JSON.stringify(ac.dhcpScopes || []),
+    };
+  });
 
   const extraVars = {
     proxmox_host: h.host, proxmox_node: h.node,
@@ -3057,6 +3103,13 @@ EOF
   hosts: dc
   gather_facts: false
   roles: [dc]
+
+# Phase 4: AD Post-Setup on DC (runs after DC role, before other servers)
+# Other servers wait for this so they can join the domain
+- name: AD Post-Setup
+  hosts: dc
+  gather_facts: false
+  roles: [ad_setup]
 
 - name: File Server
   hosts: fileserver
@@ -3434,6 +3487,112 @@ ROLESCRIPT
   # ---------------------------------------------------------------------------
   # pve_clone.py — called by proxmox_provision role
   # ---------------------------------------------------------------------------
+  # ── ansible/roles/ad_setup/tasks/main.yml ────────────────────────────────────
+  cat > "${DIR}/ansible/roles/ad_setup/tasks/main.yml" << 'ADEOF'
+---
+# AD Post-Setup — runs on Domain Controller after DC role, before other servers
+# Variables come from serversJson (per-VM dc_* fields) via extra_vars
+
+- name: Skip if not a DC or domain not configured
+  meta: end_play
+  when: hostvars[inventory_hostname].dc_domain is not defined or hostvars[inventory_hostname].dc_domain == ""
+
+- name: Wait for WinRM
+  ansible.builtin.wait_for_connection:
+    timeout: 180
+
+- name: Install AD DS, DNS, DHCP roles
+  ansible.builtin.raw: >
+    Install-WindowsFeature AD-Domain-Services,DNS,DHCP,RSAT-AD-Tools,RSAT-DNS-Server,RSAT-DHCP,GPMC -IncludeManagementTools
+
+- name: Promote as primary DC (new forest)
+  ansible.builtin.raw: |
+    Import-Module ADDSDeployment
+    Install-ADDSForest `
+      -DomainName "{{ hostvars[inventory_hostname].dc_domain }}" `
+      -DomainNetbiosName "{{ hostvars[inventory_hostname].dc_netbios }}" `
+      -ForestMode "{{ hostvars[inventory_hostname].dc_forest_mode }}" `
+      -DomainMode "{{ hostvars[inventory_hostname].dc_forest_mode }}" `
+      -SafeModeAdministratorPassword (ConvertTo-SecureString "{{ hostvars[inventory_hostname].dc_safe_mode_pw }}" -AsPlainText -Force) `
+      -InstallDns -Force -NoRebootOnCompletion
+  when: hostvars[inventory_hostname].dc_is_primary | bool
+  ignore_errors: yes
+
+- name: Promote as secondary DC
+  ansible.builtin.raw: |
+    Import-Module ADDSDeployment
+    Install-ADDSDomainController `
+      -DomainName "{{ hostvars[inventory_hostname].dc_domain }}" `
+      -SafeModeAdministratorPassword (ConvertTo-SecureString "{{ hostvars[inventory_hostname].dc_safe_mode_pw }}" -AsPlainText -Force) `
+      -Credential (New-Object PSCredential("{{ hostvars[inventory_hostname].dc_netbios }}\Administrator",(ConvertTo-SecureString "{{ win_admin_pass }}" -AsPlainText -Force))) `
+      -Force -NoRebootOnCompletion
+  when: not (hostvars[inventory_hostname].dc_is_primary | bool)
+  ignore_errors: yes
+
+- name: Reboot after promotion
+  ansible.builtin.raw: Restart-Computer -Force
+  ignore_errors: yes
+
+- name: Wait for DC to come back online
+  ansible.builtin.wait_for_connection:
+    delay: 90
+    timeout: 300
+
+- name: Create reverse DNS zone
+  ansible.builtin.raw: |
+    $octets = "{{ hostvars[inventory_hostname].dc_ip | default(ansible_host) }}".Split('.')
+    $netId  = "$($octets[0]).$($octets[1]).$($octets[2]).0/24"
+    $revZone = "$($octets[2]).$($octets[1]).$($octets[0]).in-addr.arpa"
+    if (-not (Get-DnsServerZone -Name $revZone -ErrorAction SilentlyContinue)) {
+      Add-DnsServerPrimaryZone -NetworkId $netId -ReplicationScope Domain
+      Write-Host "Created reverse zone: $revZone"
+    }
+  ignore_errors: yes
+
+- name: Create additional DNS zones
+  ansible.builtin.raw: |
+    $zones = '{{ hostvars[inventory_hostname].dc_dns_zones | default("[]") }}' | ConvertFrom-Json
+    foreach ($z in $zones) {
+      if ($z -and -not (Get-DnsServerZone -Name $z -ErrorAction SilentlyContinue)) {
+        Add-DnsServerPrimaryZone -Name $z -ReplicationScope Domain
+        Write-Host "Created DNS zone: $z"
+      }
+    }
+  ignore_errors: yes
+
+- name: Authorize DHCP server in AD
+  ansible.builtin.raw: |
+    Add-DhcpServerInDC -DnsName "{{ inventory_hostname }}.{{ hostvars[inventory_hostname].dc_domain }}" -IPAddress "{{ hostvars[inventory_hostname].dc_ip | default(ansible_host) }}"
+  ignore_errors: yes
+
+- name: Create DHCP scopes
+  ansible.builtin.raw: |
+    $scopes = '{{ hostvars[inventory_hostname].dc_dhcp_scopes | default("[]") }}' | ConvertFrom-Json
+    $i = 1
+    foreach ($sc in $scopes) {
+      if (-not $sc.start -or -not $sc.end) { $i++; continue }
+      $bits = [int]($sc.pfx -replace '[^0-9]','24')
+      $mask = ([Net.IPAddress]([UInt32]::MaxValue -shl (32-$bits) -band [UInt32]::MaxValue)).ToString()
+      $sid  = ($sc.start -replace '(\d+\.\d+\.\d+)\.\d+','$1.0')
+      Add-DhcpServerv4Scope -Name "Scope $i" -StartRange $sc.start -EndRange $sc.end -SubnetMask $mask -State Active -LeaseDuration ([TimeSpan]::FromDays([int]($sc.lease -replace '[^0-9]','8')))
+      if ($sc.gw) { Set-DhcpServerv4OptionValue -ScopeId $sid -Router $sc.gw }
+      Set-DhcpServerv4OptionValue -ScopeId $sid -DnsServer "{{ hostvars[inventory_hostname].dc_ip | default(ansible_host) }}" -DnsDomain "{{ hostvars[inventory_hostname].dc_domain }}"
+      Write-Host "Created DHCP scope $i: $($sc.start)-$($sc.end)"
+      $i++
+    }
+  when: hostvars[inventory_hostname].dc_dhcp_scopes | default('[]') != '[]'
+  ignore_errors: yes
+
+- name: Configure DHCP failover
+  ansible.builtin.raw: |
+    $scopes = Get-DhcpServerv4Scope | Select-Object -ExpandProperty ScopeId
+    foreach ($sid in $scopes) {
+      Add-DhcpServerv4Failover -Name "FO-$sid" -PartnerServer "{{ hostvars[inventory_hostname].dc_failover_ip }}" -ScopeId $sid -LoadBalancePercent 50 -MaxClientLeadTime (New-TimeSpan -Hours 1) -Force
+    }
+  when: hostvars[inventory_hostname].dc_dhcp_failover | bool and hostvars[inventory_hostname].dc_failover_ip | default('') != ''
+  ignore_errors: yes
+ADEOF
+
   cat > "${DIR}/ansible/pve_clone.py" << 'PYCLONE'
 #!/usr/bin/env python3
 import os, sys, json, time, threading
