@@ -1629,10 +1629,11 @@ function syncSettingsForm() {
   $('s-tz').value = s.tz||'W. Europe Standard Time'; $('s-locale').value = s.locale||'de-CH';
 }
 async function saveSettings() {
-  S.settings = { net:$('s-net').value, gw:$('s-gw').value, pfx:+$('s-pfx').value||24,
-    dns1:$('s-dns1').value, dns2:$('s-dns2').value, vlan:$('s-vlan').value,
-    cpus:+$('s-cpus').value||2, ram:+$('s-ram').value||4096, disk:+$('s-disk').value||75,
-    pass:$('s-pass').value, tz:$('s-tz').value, locale:$('s-locale').value };
+  S.settings = { ...S.settings,
+    cpus: +($('s-cpus')?.value)||2, ram: +($('s-ram')?.value)||4096,
+    disk: +($('s-disk')?.value)||75,
+    tz: $('s-tz')?.value||'W. Europe Standard Time',
+    locale: $('s-locale')?.value||'de-CH' };
   try {
     await api('PUT', '/api/settings', S.settings);
     const btn=$('save-btn'); btn.textContent='✓ Saved'; btn.style.background='var(--green)'; btn.style.color='#000';
@@ -1679,7 +1680,7 @@ function openModal(type, id, fromCurrentConfig) {
         <div class='ff'><label>Node Name</label><input id='m-node' autocomplete='off' value='pve'></div>
       </div>
       <div class='ff'><label>API Token ID</label><input id='m-tokid' autocomplete='off' placeholder='root@pam!deployment-token'></div>
-      <div class='ff'><label>API Token Secret</label><input type='password' id='m-toksec' autocomplete='new-password'></div>
+      <div class='ff'><label>API Token Secret</label><input type='text' id='m-toksec' autocomplete='off' data-1p-ignore data-lpignore='true' style='font-family:var(--mono);font-size:11.5px'></div>
       <div class='ff'><label>Template VM Name</label><input id='m-tmpl' autocomplete='off' value='${d.templateName||'win2025-template'}'></div>
       <div class='g2'>
         <div class='ff'><label>Storage Pool</label><input id='m-stor' autocomplete='off' value='${d.storage||'local-lvm'}'></div>
@@ -1758,10 +1759,10 @@ function openModal(type, id, fromCurrentConfig) {
     const _firstOd = S.orgs[0]?.defaults || {};
     window._hostOrgChanged = (orgId) => {
       const d = S.orgs.find(o=>o.id===orgId)?.defaults || {};
-      if ($('m-stor'))   $('m-stor').value   = d.storage   || 'local-lvm';
-      if ($('m-bridge')) $('m-bridge').value = d.bridge    || 'vmbr0';
-      if ($('m-dvlan'))  $('m-dvlan').value  = d.vlan      || '';
-      if ($('m-tmpl') && !$('m-tmpl').value) $('m-tmpl').placeholder = d.templateName || 'win2025-template';
+      if ($('m-stor'))   $('m-stor').value   = d.storage      || 'local-lvm';
+      if ($('m-bridge')) $('m-bridge').value = d.bridge       || 'vmbr0';
+      if ($('m-dvlan'))  $('m-dvlan').value  = d.vlan         || '';
+      if ($('m-tmpl'))   $('m-tmpl').value   = d.templateName || '';
     };
     $('modal-body').innerHTML =
       '<div class="ff"><label>Organisation</label><select id="m-org-id" onchange="_hostOrgChanged(this.value)">'
@@ -1771,7 +1772,7 @@ function openModal(type, id, fromCurrentConfig) {
       + '<div class="g2"><div class="ff"><label>Host IP / FQDN</label><input id="m-host" autocomplete="off" placeholder="172.16.10.2"></div>'
       + '<div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="pve"></div></div>'
       + '<div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" placeholder="root@pam!deployment-token"></div>'
-      + '<div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password"></div>'
+      + '<div class="ff"><label>API Token Secret</label><input type="text" id="m-toksec" autocomplete="off" data-1p-ignore data-lpignore="true" style="font-family:var(--mono);font-size:11.5px"></div>'
       + '<div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" placeholder="'+(_firstOd.templateName||'win2025-template')+'"></div>'
       + '<div class="g2"><div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="'+(_firstOd.storage||'local-lvm')+'"></div>'
       + '<div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="'+(_firstOd.bridge||'vmbr0')+'"></div></div>'
@@ -1793,7 +1794,7 @@ function openModal(type, id, fromCurrentConfig) {
         <div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="${h.node}"></div>
       </div>
       <div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" value="${h.tokenId}"></div>
-      <div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password" placeholder="Leave blank to keep current"></div>
+      <div class="ff"><label>API Token Secret</label><input type="text" id="m-toksec" autocomplete="off" data-1p-ignore data-lpignore="true" placeholder="Leave blank to keep current" style="font-family:var(--mono);font-size:11.5px"></div>
       <div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" value="${h.templateName||''}"></div>
       <div class="g2">
         <div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="${h.storage}"></div>
