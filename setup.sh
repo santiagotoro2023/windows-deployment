@@ -251,7 +251,8 @@ input[type=checkbox]{accent-color:var(--amber)}
 .step-name{font-size:12px;font-weight:500}
 .step-sub{font-size:10.5px;color:var(--text3)}
 
-#log{background:#050810;border:1px solid var(--b1);border-radius:var(--rad);height:280px;overflow-y:auto;padding:9px 11px;font-family:var(--mono);font-size:10.5px;color:#4ade80;line-height:1.8;white-space:pre-wrap;word-break:break-all}
+#log{background:#050810;border:1px solid var(--b1);border-radius:var(--rad);height:320px;overflow-y:auto;padding:9px 11px;font-family:var(--mono);font-size:10.5px;color:#94a3b8;line-height:1.7;white-space:pre-wrap;word-break:break-all}
+.lg-play{color:#f59e0b;font-weight:600}.lg-task{color:#60a5fa}.lg-ok{color:#4ade80}.lg-changed{color:#fb923c}.lg-fail{color:#f87171;font-weight:600}.lg-skip{color:#4b5563}.lg-recap{color:#a78bfa;font-weight:600}.lg-dim{color:#374151}.lg-info{color:#94a3b8}
 #log::-webkit-scrollbar{width:3px}#log::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
 
 /* History table */
@@ -413,9 +414,9 @@ input[type=checkbox]{accent-color:var(--amber)}
         <div class="sc-head">
           <span style="font-family:var(--mono);color:var(--green);font-size:11.5px">$</span>
           <h3>Ansible Output</h3>
-          <span id="live-b" style="margin-left:auto"></span>
+          <span id="live-b" style="margin-left:auto;display:flex;align-items:center;gap:8px"><span id="dep-progress" style="display:none;font-family:var(--mono);font-size:10px;color:var(--text3)"></span></span>
         </div>
-        <div class="sc-body" style="padding:7px 9px"><div id="log">// Select an organisation and click Deploy
+        <div class="sc-body" style="padding:7px 9px"><div id="log"><span class="lg-info">// Select an organisation and click Deploy</span>
 </div></div>
       </div>
       <div class="sc">
@@ -1090,10 +1091,15 @@ function _vdPaneAD(v) {
             ${ck('ad-primary',ac.isPrimary!==false,'Primary DC -- promote new forest')}
             ${ck('ad-rodc',!!ac.isRODC,'Read-Only DC (RODC)')}
           </div>
-          ${otherDCs.length ? `<div style="border-top:1px solid var(--b1);padding-top:8px;margin-top:6px">
+          <div style="border-top:1px solid var(--b1);padding-top:8px;margin-top:6px">
+            ${otherDCs.length ? `
             ${ck('ad-repl',!!ac.enableRepl,'Enable AD Replication')}
-            ${fsl('ad-repl-partner','Replication Partner',dcOpts)}
-          </div>` : ''}
+            ${fsl('ad-repl-partner','Replication Partner',dcOpts)}` : `
+            <div style="font-size:11px;color:var(--text3);padding:4px 0">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Add a second DC to this organisation to enable AD Replication
+            </div>`}
+          </div>
         </div></div>
       </div>
       <div>
@@ -1109,10 +1115,15 @@ function _vdPaneAD(v) {
         <div class="ads"><div class="ads-h">DHCP Scopes</div><div class="ads-b">
           <div id="dhcp-scopes-list">${scopes}</div>
           ${!ro ? `<button class="btn btn-g btn-sm" onclick="_addDhcpScope('${v.id}')">+ Add Scope</button>` : ''}
-          ${otherDCs.length ? `<div style="border-top:1px solid var(--b1);padding-top:9px;margin-top:9px">
+          <div style="border-top:1px solid var(--b1);padding-top:9px;margin-top:9px">
+            ${otherDCs.length ? `
             ${ck('dhcp-fo',!!ac.dhcpFailover,'DHCP Failover')}
-            ${fsl('dhcp-fo-partner','Failover Partner',foOpts)}
-          </div>` : ''}
+            ${fsl('dhcp-fo-partner','Failover Partner',foOpts)}` : `
+            <div style="font-size:11px;color:var(--text3);padding:4px 0">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Add a second DC to enable DHCP Failover
+            </div>`}
+          </div>
         </div></div>
       </div>
     </div>
@@ -1375,23 +1386,80 @@ async function startDeploy() {
 async function pollDeployStatus() {
   try {
     const data = await api('GET', '/api/deploy/status');
-    const log = $('log');
-    if (data.log !== undefined) { log.textContent = data.log; log.scrollTop = log.scrollHeight; }
+    const logDiv = $('log');
+    if (data.log !== undefined) {
+      logDiv.innerHTML = _fmtDeployLog(data.log);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
     if (!data.running) {
       const failed = data.exitCode !== 0;
       if (failed) {
-        log.style.color = 'var(--red)'; log.style.borderColor = 'var(--red)';
-        $('live-b').innerHTML = `<span style="font-size:10px;color:var(--red);font-family:var(--mono)">✗ FAILED (code ${data.exitCode})</span>`;
+        logDiv.style.color = 'var(--red)'; logDiv.style.borderColor = 'var(--red)';
+        $('live-b').innerHTML = `<span style="font-size:10px;color:var(--red);font-family:var(--mono)">&#x2717; FAILED (code ${data.exitCode})</span>`;
         $('dsb-text').textContent = 'Deploy failed';
-        setTimeout(() => { log.style.color=''; log.style.borderColor=''; }, 5000);
+        setTimeout(() => { logDiv.style.color=''; logDiv.style.borderColor=''; }, 5000);
       } else {
-        $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">✓ Done</span>';
+        $('live-b').innerHTML = '<span style="font-size:10px;color:var(--green);font-family:var(--mono)">&#x2713; Done</span>';
         $('dsb-text').textContent = 'Deploy finished';
       }
       stopDeploy(); loadHistory();
-    } else { $('dsb-text').textContent = 'Deploy running...'; }
+    } else {
+      // Parse progress from log
+      const prog = _parseDeployProgress(data.log||'');
+      $('dsb-text').textContent = prog.label || 'Deploying...';
+      const liveB = $('live-b');
+      liveB.innerHTML = (prog.pct !== null
+        ? `<span style="font-family:var(--mono);font-size:10px;color:var(--amber)">${prog.pct}%</span>`
+        : '<span style="font-size:10px;color:var(--amber);font-family:var(--mono);animation:blink .8s infinite">&#x25cf; LIVE</span>') +
+        (prog.label && prog.label !== 'Deploying...' ? `<span style="font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${prog.label}">${prog.label}</span>` : '');
+    }
   } catch(_) {}
 }
+
+// Parse Ansible output to extract progress percentage and current task label
+function _parseDeployProgress(log) {
+  const lines = log.split('\n').filter(l => l.trim());
+  // Count PLAY and TASK lines for progress
+  const plays = lines.filter(l => l.startsWith('PLAY [')).length;
+  const tasks = lines.filter(l => l.startsWith('TASK [')).length;
+  const totalTasks = 40; // rough estimate for full deploy
+  const pct = Math.min(99, Math.round((tasks / totalTasks) * 100));
+  // Current task/play label
+  let label = 'Deploying...';
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i];
+    if (l.startsWith('TASK [')) {
+      label = l.replace(/TASK \[/, '').replace(/\].*/, '').trim();
+      if (label.length > 45) label = label.slice(0, 43) + '...';
+      break;
+    }
+    if (l.startsWith('PLAY [')) {
+      label = l.replace(/PLAY \[/, '').replace(/\].*/, '').trim();
+      break;
+    }
+  }
+  return { pct: tasks > 0 ? pct : null, label };
+}
+
+// Format raw Ansible log output with syntax highlighting
+function _fmtDeployLog(raw) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return raw.split('\n').map(line => {
+    const l = esc(line);
+    if (l.match(/^PLAY \[/))         return `<span class="lg-play">${l}</span>`;
+    if (l.match(/^TASK \[/))         return `<span class="lg-task">${l}</span>`;
+    if (l.match(/^ok:/))              return `<span class="lg-ok">${l}</span>`;
+    if (l.match(/^changed:/))         return `<span class="lg-changed">${l}</span>`;
+    if (l.match(/^fatal:|^failed:/i)) return `<span class="lg-fail">${l}</span>`;
+    if (l.match(/^skipping:/))        return `<span class="lg-skip">${l}</span>`;
+    if (l.match(/^PLAY RECAP/))       return `<span class="lg-recap">${l}</span>`;
+    if (l.match(/^\[windows-deploy|^\[AD Setup/)) return `<span class="lg-play">${l}</span>`;
+    if (l.match(/^\s*$/))            return '';
+    if (l.match(/^PLAY \*{3}|^TASK \*{3}/)) return `<span class="lg-dim">${l}</span>`;
+    return l;
+  }).filter(l => l !== '').join('\n');
+}
+
 
 function stopDeploy() {
   S.deploying = false;
@@ -2169,7 +2237,7 @@ function orgDefaultsForm(d) {
 function closeModal() { $('modal-bg').classList.remove('open'); }
 
 function renderAll() {
-  renderTree(q()); renderOverview();
+  renderTree(''); renderOverview(); // Always show full tree on data changes
   if (S.view==='deploy') { populateDepOrgSel(); renderDeploy(); }
   if (S.view==='templates') loadTemplates();
   if (S.view==='admin') loadUsers();
@@ -2815,6 +2883,10 @@ app.post('/api/deploy', auth('deploy'), (req, res) => {
     orgVms.filter(v => v.role === role).forEach(v => {
       let hostLine = `${v.hostname} ansible_host=${v.ip}`;
       // For DC role: embed per-host AD vars directly in inventory
+      // Non-DC VMs get DC IPs as DNS (if DCs exist)
+      if (v.role !== 'dc' && dcVms.length > 0) {
+        hostLine += ` dns_primary=${dcDns1} dns_secondary=${dcDns2}`;
+      }
       if (v.role === 'dc') {
         const ac = v.adConfig || {};
         const repl  = ac.replPartner  ? (orgVms.find(vv=>vv.id===ac.replPartner)?.ip||'')  : '';
@@ -2840,8 +2912,13 @@ app.post('/api/deploy', auth('deploy'), (req, res) => {
   const resolvedPass = pick(od.pass, s.pass, 'Asdf1234!');
   const resolvedGw   = pick(od.gateway, '172.16.10.1');
   const resolvedPfx  = pick(od.pfx, 24);
-  const resolvedDns1 = pick(od.dns1, '8.8.8.8');
-  const resolvedDns2 = pick(od.dns2, '1.1.1.1');
+  // DC IPs for non-DC VMs — if DCs exist, use them as DNS
+  const dcVms = orgVms.filter(v => v.role === 'dc').sort((a,b) => a.ip.localeCompare(b.ip));
+  const orgDns1 = pick(od.dns1, '8.8.8.8');
+  const orgDns2 = pick(od.dns2, '1.1.1.1');
+  // DCs use org DNS; all other servers use DC IPs as DNS
+  const dcDns1  = dcVms[0]?.ip || orgDns1;
+  const dcDns2  = dcVms[1]?.ip || orgDns2;
 
   ini += `[windows:vars]
 ansible_user=Administrator
@@ -2853,8 +2930,8 @@ ansible_winrm_server_cert_validation=ignore
 ansible_winrm_scheme=http
 network_gateway=${resolvedGw}
 network_prefix_length=${resolvedPfx}
-dns_primary=${resolvedDns1}
-dns_secondary=${resolvedDns2}
+dns_primary=${orgDns1}
+dns_secondary=${orgDns2}
 win_timezone=${s.tz||'W. Europe Standard Time'}
 win_locale=${s.locale||'de-CH'}
 `;
@@ -2891,7 +2968,7 @@ win_locale=${s.locale||'de-CH'}
     proxmox_token_id: h.tokenId, proxmox_token_secret: h.tokenSecret,
     win_admin_pass: resolvedPass,
     network_gateway: resolvedGw, network_prefix_length: resolvedPfx,
-    dns_primary: resolvedDns1, dns_secondary: resolvedDns2,
+    dns_primary: orgDns1, dns_secondary: orgDns2,
     win_timezone: s.tz||'W. Europe Standard Time', win_locale: s.locale||'de-CH',
   };
   fs.writeFileSync(evFile, JSON.stringify({ ...extraVars, servers: serversJson, vmid_file: vmidFile }));
