@@ -167,6 +167,30 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 
 #dp{width:300px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--b1);display:none;flex-direction:column;overflow:hidden}
 #dp.open{display:flex}
+.vd-header{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--b1);background:var(--panel);flex-shrink:0}
+.vd-icon{width:36px;height:36px;border-radius:var(--rad2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.vd-title{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.vd-sub{font-size:11.5px;color:var(--text2);margin-top:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.vd-tabs{display:flex;gap:1px;padding:0 22px;border-bottom:1px solid var(--b1);background:var(--panel);flex-shrink:0}
+.vd-tab{padding:9px 14px;font-size:12.5px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all .12s;margin-bottom:-1px;white-space:nowrap}
+.vd-tab:hover{color:var(--text)}.vd-tab.act{color:var(--amber);border-bottom-color:var(--amber)}
+.vd-pane{padding:20px 22px;display:none}.vd-pane.act{display:block}
+.vd-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.vd-stat{background:var(--panel);border:1px solid var(--b1);border-radius:var(--rad2);padding:11px 13px}
+.vd-stat-v{font-size:20px;font-weight:600;font-family:var(--mono);line-height:1.2}
+.vd-stat-l{font-size:9.5px;color:var(--text2);margin-top:3px;text-transform:uppercase;letter-spacing:.07em}
+.res-bar{height:6px;background:var(--panel3);border-radius:3px;overflow:hidden;margin:3px 0 1px}
+.res-bar-f{height:100%;border-radius:3px;transition:width .6s ease}
+.res-row{margin-bottom:11px}
+.res-lbl{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:2px;color:var(--text2)}
+.res-lbl span:last-child{color:var(--text);font-family:var(--mono)}
+.ads{background:var(--panel);border:1px solid var(--b1);border-radius:var(--rad2);margin-bottom:10px;overflow:hidden}
+.ads-h{padding:9px 13px;background:var(--panel2);border-bottom:1px solid var(--b1);font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+.ads-b{padding:13px}
+.ck-row{display:flex;align-items:center;gap:7px;margin-bottom:7px;font-size:12px;color:var(--text)}
+.ck-row input[type=checkbox]{accent-color:var(--amber)}
+.scope-card{background:var(--panel2);border:1px solid var(--b1);border-radius:var(--rad);padding:9px;margin-bottom:8px}
+
 .dp-head{padding:11px 13px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:7px;flex-shrink:0}
 .dp-hic{width:26px;height:26px;border-radius:var(--rad);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
 .dp-htitle{font-weight:600;font-size:13px}
@@ -501,6 +525,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 </div>
 
 </div><!-- #main -->
+<div id="view-vm-detail" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:var(--bg)">
+  <div class="vd-header">
+    <div class="vd-icon" id="vd-icon"></div>
+    <div style="flex:1;min-width:0"><div class="vd-title" id="vd-title"></div><div class="vd-sub" id="vd-sub"></div></div>
+    <div style="display:flex;gap:6px;flex-shrink:0" id="vd-actions"></div>
+  </div>
+  <div class="vd-tabs" id="vd-tabs"></div>
+  <div id="vd-content" style="flex:1;overflow-y:auto"></div>
+</div>
 <div id="dp"><div class="dp-scroll"><div id="dp-body"></div></div></div>
 </div><!-- #content -->
 </div><!-- #layout -->
@@ -567,7 +600,7 @@ const btn = (icon, label) => `<span style="display:inline-flex;align-items:cente
 
 // ── State ────────────────────────────────────────────────────────────────────
 let S = {
-  orgs:[], hosts:[], vms:[], selVm:null, selHost:null, selOrg:null, flt:'all', view:'overview', deployOrgId:'',
+  orgs:[], hosts:[], vms:[], selVm:null, selHost:null, selOrg:null, flt:'all', view:'overview', deployOrgId:'', _pveStatus:{},
   deploying:false, session:null,
   settings:{ net:'172.16.10', gw:'172.16.10.1', pfx:24, dns1:'8.8.8.8', dns2:'1.1.1.1', vlan:'', cpus:2, ram:4096, disk:75, pass:'Asdf1234!', tz:'W. Europe Standard Time', locale:'de-CH' }
 };
@@ -656,6 +689,7 @@ function toast(msg, isErr=true) {
 // ── Views ─────────────────────────────────────────────────────────────────────
 function setView(v, btn) {
   S.view = v;
+  $('view-vm-detail').style.display='none'; clearInterval(_vdResTimer); _vdId=null; S.selVm=null;
   document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
   $('view-'+v).classList.add('active');
   document.querySelectorAll('.tnb').forEach(b => b.classList.remove('act'));
@@ -780,8 +814,8 @@ function clickHost(id) {
   const chv = $('chv-'+id); if (chv) chv.classList.toggle('open', h._open);
   S.selHost = id; S.selOrg = null; S.selVm = null; showHostDetail(id); renderTree(q());
 }
-function clickVm(id) { S.selVm = id; S.selHost = null; renderTree(q()); renderGrid(); showVmDetail(id); }
-function closeDetail() { S.selVm=null; S.selHost=null; S.selOrg=null; $('dp').classList.remove('open'); renderTree(q()); renderGrid(); }
+function clickVm(id) { S.selVm=id; S.selHost=null; S.selOrg=null; renderTree(q()); renderGrid(); showVmDetail(id); }
+function closeDetail() { S.selVm=null; S.selHost=null; S.selOrg=null; $('dp').classList.remove('open'); $('view-vm-detail').style.display='none'; clearInterval(_vdResTimer); renderTree(q()); renderGrid(); }
 
 // ── Authenticated file downloads ─────────────────────────────────────────────
 async function downloadRdp(vmId, hostname) {
@@ -894,63 +928,311 @@ function renderGrid() {
 }
 
 // ── Detail Panels ─────────────────────────────────────────────────────────────
+// ── VM Detail View ────────────────────────────────────────────────────────────
+let _vdTab = 'overview';
+let _vdId  = null;
+let _vdResTimer = null;
+
 function showVmDetail(id) {
   const v = vb(id); if (!v) return;
-  const r=ROLES[v.role]||{}; const s=ST[v.status]||ST.pending; const h=hb(v.hostId);
-  const dep=['cloning','configuring'].includes(v.status);
-  const canEdit = S.session?.role !== 'readonly';
-  const pveBase = h ? `https://${h.host}:8006` : '#';
-  const consoleUrl = v.vmid ? `${pveBase}/?console=kvm&vmid=${v.vmid}&node=${h?.node||'pve'}` : null;
-  $('dp').classList.add('open');
-  $('dp-body').innerHTML = `
-    <div class="dp-head">
-      <div class="dp-hic" style="background:${r.bg}">${r.icon||'□'}</div>
-      <div style="flex:1;overflow:hidden"><div class="dp-htitle">${v.hostname}</div><div class="dp-hsub">${r.label}</div></div>
-      <button class="dp-x" onclick="closeDetail()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-    </div>
-    <div class="dp-sec">
-      <div class="dp-sec-title">Status</div>
-      <div style="display:flex;align-items:center;gap:6px${dep?';margin-bottom:7px':''}">
-        <div class="tr-dot ${s.dot}" style="width:6px;height:6px"></div>
-        <span style="font-weight:600;color:${s.c};font-size:12px">${s.l}</span>
-      </div>
-      ${dep ? `<div style="font-size:10px;color:var(--text3);margin-bottom:3px">${Math.round(v.prog||0)}%</div><div class="vc-bar"><div class="vc-bar-fill" style="width:${v.prog||0}%;background:${s.c}"></div></div>` : ''}
-    </div>
-    ${canEdit && v.vmid ? `<div class="dp-sec">
-      <div class="dp-sec-title">Power</div>
-      <div class="power-row">
-        <button class="btn btn-power btn-start" onclick="powerAction('${v.id}','start')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start</button>
-        <button class="btn btn-power btn-stop" onclick="powerAction('${v.id}','stop')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> Stop</button>
-        <button class="btn btn-power btn-reboot" onclick="powerAction('${v.id}','reboot')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> Reboot</button>
-        <button class="btn btn-power btn-stop" onclick="powerAction('${v.id}','shutdown')" style="display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg> Shutdown</button>
-      </div>
-    </div>` : ''}
-    <div class="dp-sec">
-      <div class="dp-sec-title">Network</div>
-      <div class="dp-row"><span class="dp-k">IP Address</span><span class="dp-v">${v.ip}</span></div>
-      <div class="dp-row"><span class="dp-k">Gateway</span><span class="dp-v">${S.settings.gw}</span></div>
-      <div class="dp-row"><span class="dp-k">DNS</span><span class="dp-v">${S.settings.dns1}</span></div>
-      ${v.vlan ? `<div class="dp-row"><span class="dp-k">VLAN</span><span class="dp-v">${v.vlan}</span></div>` : ''}
-      <div class="dp-row"><span class="dp-k">RDP</span><span class="dp-v" style="color:var(--green)">Enabled</span></div>
-    </div>
-    <div class="dp-sec">
-      <div class="dp-sec-title">Resources</div>
-      <div class="dp-row"><span class="dp-k">CPUs</span><span class="dp-v">${v.cpus} vCPU</span></div>
-      <div class="dp-row"><span class="dp-k">RAM</span><span class="dp-v">${v.ram/1024} GB</span></div>
-      <div class="dp-row"><span class="dp-k">Disk</span><span class="dp-v">${v.disk} GB</span></div>
-    </div>
-    <div class="dp-sec">
-      <div class="dp-sec-title">Config</div>
-      <div class="dp-row"><span class="dp-k">Host</span><span class="dp-v">${h?.name||'—'}</span></div>
-      <div class="dp-row"><span class="dp-k">Role</span><span class="dp-v">${v.role}</span></div>
-      ${v.vmid ? `<div class="dp-row"><span class="dp-k">VMID</span><span class="dp-v">${v.vmid}</span></div>` : ''}
-    </div>
-    <div class="dp-actions">
-      ${consoleUrl ? `<a href="${consoleUrl}" target="_blank" class="btn btn-console btn-fw" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> Open Console</a>` : ''}
-      <button class="btn btn-rdp btn-fw" onclick="downloadRdp('${v.id}','${v.hostname}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download .rdp</button>
-      ${canEdit ? `<button class="btn btn-g btn-fw" onclick="openModal('edit-vm','${v.id}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button><div class="sep"></div><button class="btn btn-d btn-fw" onclick="delVm('${v.id}')" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg> Remove</button>` : ''}
-    </div>`;
+  _vdId = id;
+  document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+  $('view-vm-detail').style.display = 'flex';
+  $('dp').classList.remove('open');
+  document.querySelectorAll('.tnb').forEach(b => b.classList.remove('act'));
+  _vdRenderHeader(v);
+  _vdRenderTabs(v);
+  _vdShowTab(_vdTab, v);
+  clearInterval(_vdResTimer);
+  _vdResTimer = setInterval(() => {
+    const cur = vb(_vdId);
+    if (cur && _vdTab === 'resources') $('vd-content').innerHTML = _vdPaneResources(cur);
+  }, 10000);
 }
+
+function closeVmDetail() {
+  clearInterval(_vdResTimer); _vdId = null; S.selVm = null;
+  $('view-vm-detail').style.display = 'none';
+  renderTree(q()); renderGrid();
+  setView('overview', null);
+}
+
+function _vdRenderHeader(v) {
+  const r = ROLES[v.role]||{}; const s = ST[v.status]||ST.pending;
+  const h = hb(v.hostId); const org = ob(h?.orgId);
+  const canEdit = S.session?.role !== 'readonly';
+  $('vd-icon').style.background = r.bg||'var(--panel2)';
+  $('vd-icon').textContent = r.icon||'\u25a1';
+  $('vd-title').textContent = v.hostname;
+  $('vd-sub').innerHTML =
+    `<span style="color:${s.c};display:flex;align-items:center;gap:4px"><span class="tr-dot ${s.dot}" style="width:5px;height:5px;display:inline-block;border-radius:50%"></span>${s.l}</span>` +
+    `<span style="color:var(--b3)">|</span><span>${r.label}</span>` +
+    `<span style="color:var(--b3)">|</span><span style="font-family:var(--mono)">${v.ip}</span>` +
+    (v.vlan ? `<span style="color:var(--b3)">|</span><span>VLAN ${v.vlan}</span>` : '') +
+    `<span style="color:var(--b3)">|</span><span>${org?.name||'?'} / ${h?.name||'?'}</span>` +
+    (v.vmid ? `<span style="color:var(--b3)">|</span><span style="font-family:var(--mono);color:var(--text3)">VMID ${v.vmid}</span>` : '');
+  const pveBase = h ? `https://${h.host}:8006` : '#';
+  const conUrl  = v.vmid ? `${pveBase}/?console=kvm&vmid=${v.vmid}&node=${h?.node||'pve'}` : null;
+  const svgEdit = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const svgBack = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+  const svgCon  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
+  const svgRdp  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+  $('vd-actions').innerHTML =
+    (conUrl ? `<a href="${conUrl}" target="_blank" class="btn btn-console btn-sm" style="display:inline-flex;align-items:center;gap:5px">${svgCon} Console</a>` : '') +
+    `<button class="btn btn-rdp btn-sm" onclick="downloadRdp('${v.id}','${v.hostname}')" style="display:inline-flex;align-items:center;gap:5px">${svgRdp} .rdp</button>` +
+    (canEdit ? `<button class="btn btn-g btn-sm" onclick="openModal('edit-vm','${v.id}')" style="display:inline-flex;align-items:center;gap:5px">${svgEdit} Edit</button>` : '') +
+    `<button class="btn btn-g btn-sm" onclick="closeVmDetail()" style="display:inline-flex;align-items:center;gap:5px">${svgBack} Back</button>`;
+}
+
+function _vdRenderTabs(v) {
+  const tabs = [
+    { id:'overview',  label:'Overview' },
+    ...(v.role === 'dc' ? [{ id:'ad', label:'AD / DNS / DHCP' }] : []),
+    { id:'resources', label:'Resources' },
+    { id:'power',     label:'Power' },
+  ];
+  $('vd-tabs').innerHTML = tabs.map(t =>
+    `<div class="vd-tab${_vdTab===t.id?' act':''}" onclick="_vdShowTab('${t.id}')">${t.label}</div>`
+  ).join('');
+}
+
+function _vdShowTab(tab, v) {
+  _vdTab = tab;
+  if (!v) v = vb(_vdId);
+  if (!v) return;
+  const labels = { overview:'Overview', ad:'AD / DNS / DHCP', resources:'Resources', power:'Power' };
+  document.querySelectorAll('.vd-tab').forEach(t => t.classList.toggle('act', t.textContent.trim() === (labels[tab]||'')));
+  const fns = { overview:_vdPaneOverview, ad:_vdPaneAD, resources:_vdPaneResources, power:_vdPanePower };
+  $('vd-content').innerHTML = (fns[tab] || fns.overview)(v);
+}
+
+function _vdPaneOverview(v) {
+  const s = ST[v.status]||ST.pending; const h = hb(v.hostId);
+  const org = ob(h?.orgId); const od = org?.defaults||{};
+  const gw = od.gateway||'--'; const dns1 = od.dns1||'--'; const dns2 = od.dns2||'--';
+  const domain = v.domain||od.domain||'';
+  const dep = ['cloning','configuring'].includes(v.status);
+  return `<div class="vd-pane act">
+    <div class="vd-stats">
+      <div class="vd-stat"><div class="vd-stat-v" style="color:${s.c}">${s.l}</div><div class="vd-stat-l">Status</div></div>
+      <div class="vd-stat"><div class="vd-stat-v">${v.cpus}</div><div class="vd-stat-l">vCPU</div></div>
+      <div class="vd-stat"><div class="vd-stat-v">${(v.ram/1024).toFixed(0)} GB</div><div class="vd-stat-l">RAM</div></div>
+      <div class="vd-stat"><div class="vd-stat-v">${v.disk} GB</div><div class="vd-stat-l">Disk</div></div>
+    </div>
+    ${dep ? `<div class="vc-bar" style="margin-bottom:14px"><div class="vc-bar-fill" style="width:${v.prog||0}%;background:${s.c}"></div></div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="ads"><div class="ads-h">Network</div><div class="ads-b">
+        <div class="dp-row"><span class="dp-k">IP</span><span class="dp-v" style="font-family:var(--mono)">${v.ip}</span></div>
+        <div class="dp-row"><span class="dp-k">Gateway</span><span class="dp-v" style="font-family:var(--mono)">${gw}</span></div>
+        <div class="dp-row"><span class="dp-k">DNS Primary</span><span class="dp-v" style="font-family:var(--mono)">${dns1}</span></div>
+        <div class="dp-row"><span class="dp-k">DNS Secondary</span><span class="dp-v" style="font-family:var(--mono)">${dns2}</span></div>
+        ${v.vlan ? `<div class="dp-row"><span class="dp-k">VLAN</span><span class="dp-v">${v.vlan}</span></div>` : ''}
+        ${domain ? `<div class="dp-row"><span class="dp-k">Domain</span><span class="dp-v">${domain}</span></div>` : ''}
+        <div class="dp-row"><span class="dp-k">RDP</span><span class="dp-v" style="color:var(--green)">Enabled</span></div>
+      </div></div>
+      <div class="ads"><div class="ads-h">Placement</div><div class="ads-b">
+        <div class="dp-row"><span class="dp-k">Organisation</span><span class="dp-v">${org?.name||'--'}</span></div>
+        <div class="dp-row"><span class="dp-k">Host</span><span class="dp-v">${h?.name||'--'}</span></div>
+        <div class="dp-row"><span class="dp-k">Node</span><span class="dp-v">${h?.node||'--'}</span></div>
+        ${v.vmid ? `<div class="dp-row"><span class="dp-k">VMID</span><span class="dp-v" style="font-family:var(--mono)">${v.vmid}</span></div>` : ''}
+        <div class="dp-row"><span class="dp-k">Role</span><span class="dp-v">${ROLES[v.role]?.label||v.role}</span></div>
+      </div></div>
+    </div>
+  </div>`;
+}
+
+function _dhcpScopeCard(i, s, ctx) {
+  return `<div class="scope-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:600;color:var(--text2)">Scope ${i+1}</span>
+      <button class="btn btn-d btn-sm" onclick="this.closest('.scope-card').remove()" style="padding:2px 7px">Remove</button>
+    </div>
+    <div class="g2" style="margin-bottom:6px">
+      <div class="ff" style="margin-bottom:0"><label>Start IP</label><input class="sc-start" value="${s.start||''}" placeholder="${ctx.netpfx}.50" autocomplete="off"></div>
+      <div class="ff" style="margin-bottom:0"><label>End IP</label><input class="sc-end" value="${s.end||''}" placeholder="${ctx.netpfx}.200" autocomplete="off"></div>
+    </div>
+    <div class="g3">
+      <div class="ff" style="margin-bottom:0"><label>Subnet /</label><input class="sc-pfx" value="${s.pfx||'24'}" placeholder="24" autocomplete="off"></div>
+      <div class="ff" style="margin-bottom:0"><label>Gateway</label><input class="sc-gw" value="${s.gw||ctx.gw||''}" placeholder="${ctx.gw||'172.16.10.1'}" autocomplete="off"></div>
+      <div class="ff" style="margin-bottom:0"><label>Lease (d)</label><input class="sc-lease" value="${s.lease||'8'}" autocomplete="off"></div>
+    </div>
+  </div>`;
+}
+
+function _vdPaneAD(v) {
+  const ac = v.adConfig||{}; const h = hb(v.hostId); const org = ob(h?.orgId); const od = org?.defaults||{};
+  const ro = S.session?.role === 'readonly';
+  const orgHosts = S.hosts.filter(hh => hh.orgId === h?.orgId);
+  const otherDCs = S.vms.filter(vv => vv.id !== v.id && vv.role === 'dc' && orgHosts.some(hh => hh.id === vv.hostId));
+  const dcOpts = otherDCs.map(d => `<option value="${d.id}"${ac.replPartner===d.id?' selected':''}>${d.hostname}</option>`).join('');
+  const foOpts = otherDCs.map(d => `<option value="${d.id}"${ac.failPartner===d.id?' selected':''}>${d.hostname}</option>`).join('');
+  const netpfx = od.netPrefix || od.gateway?.split('.').slice(0,3).join('.') || '172.16.10';
+  const revZone = netpfx.split('.').reverse().join('.') + '.in-addr.arpa';
+  const inp = (id,lbl,val,ph) => `<div class="ff"><label>${lbl}</label><input id="${id}" value="${val||''}" placeholder="${ph||''}" autocomplete="off"${ro?' readonly':''}></div>`;
+  const ck  = (id,chk,lbl)   => `<div class="ck-row"><input type="checkbox" id="${id}"${chk?' checked':''}${ro?' disabled':''}><label for="${id}">${lbl}</label></div>`;
+  const fsl = (id,lbl,opts)  => `<div class="ff"><label>${lbl}</label><select id="${id}"${ro?' disabled':''}><option value="">-- none --</option>${opts}</select></div>`;
+  const scopes = (ac.dhcpScopes||[]).length > 0 ? (ac.dhcpScopes||[]).map((s,i) => _dhcpScopeCard(i,s,{netpfx,gw:od.gateway||''})).join('') : _dhcpScopeCard(0,{},{netpfx,gw:od.gateway||''});
+  return `<div class="vd-pane act">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <div class="ads"><div class="ads-h">Active Directory</div><div class="ads-b">
+          ${inp('ad-domain','Domain Name',ac.domain||od.domain,'contoso.local')}
+          ${inp('ad-netbios','NetBIOS',ac.netbios||(ac.domain||od.domain||'').split('.')[0]?.toUpperCase()||'','CONTOSO')}
+          <div class="g2">
+            <div class="ff"><label>Forest Mode</label><select id="ad-mode"${ro?' disabled':''}>${['WinThreshold','Win2016','Win2012R2'].map(m=>`<option value="${m}"${(ac.forestMode||'WinThreshold')===m?' selected':''}>${m==='WinThreshold'?'2025/2022':m}</option>`).join('')}</select></div>
+            <div class="ff"><label>Safe Mode Password</label><input id="ad-safepw" type="text" data-1p-ignore value="${ac.safeModePw||''}" placeholder="same as admin pw" autocomplete="off"${ro?' readonly':''}></div>
+          </div>
+          <div style="border-top:1px solid var(--b1);padding-top:8px;margin-top:6px">
+            ${ck('ad-primary',ac.isPrimary!==false,'Primary DC -- promote new forest')}
+            ${ck('ad-rodc',!!ac.isRODC,'Read-Only DC (RODC)')}
+          </div>
+          ${otherDCs.length ? `<div style="border-top:1px solid var(--b1);padding-top:8px;margin-top:6px">
+            ${ck('ad-repl',!!ac.enableRepl,'Enable AD Replication')}
+            ${fsl('ad-repl-partner','Replication Partner',dcOpts)}
+          </div>` : ''}
+        </div></div>
+      </div>
+      <div>
+        <div class="ads"><div class="ads-h">DNS Zones</div><div class="ads-b">
+          <div style="background:var(--panel2);border:1px solid var(--b1);border-radius:var(--rad);padding:8px 10px;margin-bottom:10px;font-size:11px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:var(--text3)">Forward</span><span style="font-family:var(--mono)">${ac.domain||od.domain||'contoso.local'}</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--text3)">Reverse</span><span style="font-family:var(--mono)">${revZone}</span></div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:8px">Additional zones:</div>
+          <div id="dns-zones-list">${(ac.dnsZones||[]).map(z=>`<div style="display:flex;gap:5px;margin-bottom:5px"><input value="${z}" class="dns-zone-inp" style="flex:1;background:var(--panel2);border:1px solid var(--b1);color:var(--text);padding:4px 7px;border-radius:var(--rad);font-size:11.5px" placeholder="extra.zone">${!ro?'<button class="btn btn-d btn-sm" onclick="this.parentElement.remove()" style="padding:2px 7px">x</button>':''}</div>`).join('')}</div>
+          ${!ro ? '<button class="btn btn-g btn-sm" onclick="_addDnsZone()">+ Add Zone</button>' : ''}
+        </div></div>
+        <div class="ads"><div class="ads-h">DHCP Scopes</div><div class="ads-b">
+          <div id="dhcp-scopes-list">${scopes}</div>
+          ${!ro ? `<button class="btn btn-g btn-sm" onclick="_addDhcpScope('${v.id}')">+ Add Scope</button>` : ''}
+          ${otherDCs.length ? `<div style="border-top:1px solid var(--b1);padding-top:9px;margin-top:9px">
+            ${ck('dhcp-fo',!!ac.dhcpFailover,'DHCP Failover')}
+            ${fsl('dhcp-fo-partner','Failover Partner',foOpts)}
+          </div>` : ''}
+        </div></div>
+      </div>
+    </div>
+    ${!ro ? `<div style="margin-top:10px;padding-top:12px;border-top:1px solid var(--b1);display:flex;gap:8px;align-items:center">
+      <button class="btn btn-g" onclick="_saveAdConfig('${v.id}')" style="display:inline-flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Config</button>
+      <button class="btn btn-a" onclick="_runAdSetup('${v.id}')" style="display:inline-flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Run AD Setup on DC</button>
+      <span style="font-size:11px;color:var(--text3)">Connects via WinRM -- promotes DC, configures DNS zones and DHCP scopes</span>
+    </div>` : ''}
+  </div>`;
+}
+
+function _addDnsZone() {
+  const list = $('dns-zones-list'); if (!list) return;
+  const d = document.createElement('div'); d.style.cssText='display:flex;gap:5px;margin-bottom:5px';
+  d.innerHTML = `<input class="dns-zone-inp" style="flex:1;background:var(--panel2);border:1px solid var(--b1);color:var(--text);padding:4px 7px;border-radius:var(--rad);font-size:11.5px" placeholder="extra.zone"><button class="btn btn-d btn-sm" onclick="this.parentElement.remove()" style="padding:2px 7px">x</button>`;
+  list.appendChild(d);
+}
+
+function _addDhcpScope(vmId) {
+  const v = vb(vmId); if (!v) return;
+  const h = hb(v.hostId); const org = ob(h?.orgId); const od = org?.defaults||{};
+  const netpfx = od.netPrefix || od.gateway?.split('.').slice(0,3).join('.') || '172.16.10';
+  const list = $('dhcp-scopes-list'); if (!list) return;
+  const n = list.querySelectorAll('.scope-card').length;
+  const d = document.createElement('div');
+  d.innerHTML = _dhcpScopeCard(n, {}, { netpfx, gw: od.gateway||'' });
+  list.insertBefore(d.firstElementChild, list.lastElementChild);
+}
+
+async function _saveAdConfig(vmId) {
+  const v = vb(vmId); if (!v) return;
+  const ac = {
+    domain:       $('ad-domain')?.value||'',
+    netbios:      $('ad-netbios')?.value||'',
+    forestMode:   $('ad-mode')?.value||'WinThreshold',
+    safeModePw:   $('ad-safepw')?.value||'',
+    isPrimary:    $('ad-primary')?.checked ?? true,
+    isRODC:       !!$('ad-rodc')?.checked,
+    enableRepl:   !!$('ad-repl')?.checked,
+    replPartner:  $('ad-repl-partner')?.value||'',
+    dhcpFailover: !!$('dhcp-fo')?.checked,
+    failPartner:  $('dhcp-fo-partner')?.value||'',
+    dnsZones:     [...(document.querySelectorAll('.dns-zone-inp')||[])].map(i=>i.value).filter(Boolean),
+    dhcpScopes:   [...(document.querySelectorAll('.scope-card')||[])].map(el=>({
+      start: el.querySelector('.sc-start')?.value||'',
+      end:   el.querySelector('.sc-end')?.value||'',
+      pfx:   el.querySelector('.sc-pfx')?.value||'24',
+      gw:    el.querySelector('.sc-gw')?.value||'',
+      lease: el.querySelector('.sc-lease')?.value||'8',
+    })).filter(s=>s.start&&s.end),
+  };
+  try {
+    await api('PUT', `/api/vms/${vmId}`, { ...v, adConfig: ac });
+    const idx = S.vms.findIndex(x => x.id === vmId);
+    if (idx >= 0) S.vms[idx].adConfig = ac;
+    toast('AD configuration saved', false);
+  } catch(e) { toast(e.message); }
+}
+
+async function _runAdSetup(vmId) {
+  const v = vb(vmId); if (!v || !v.vmid) { toast('VM must be deployed first'); return; }
+  if (!confirm(`Run AD Setup on ${v.hostname}?\n\nThis connects via WinRM and:\n- Promotes the DC / installs AD DS\n- Creates DNS zones (forward + reverse)\n- Configures DHCP scopes\n\nMake sure the VM is fully booted.`)) return;
+  await _saveAdConfig(vmId);
+  try {
+    await api('POST', `/api/vms/${vmId}/ad-setup`, {});
+    toast('AD setup started -- watch the Deploy tab for the live log', false);
+  } catch(e) { toast(e.message); }
+}
+
+function _vdPaneResources(v) {
+  const p = S._pveStatus?.[v.hostname];
+  if (!p) return `<div class="vd-pane act" style="text-align:center;padding:60px 0;color:var(--text3)">
+    <div style="font-size:13px;margin-bottom:5px">No live data</div>
+    <div style="font-size:11.5px">Available once the VM is deployed and running.</div>
+  </div>`;
+  const cpu = Math.round((p.cpu||0)*100);
+  const mu = p.mem||0; const mm = p.maxmem||v.ram*1024*1024||1;
+  const mpct = Math.round(mu/mm*100);
+  const mgb = (mu/1073741824).toFixed(1); const mmax = (mm/1073741824).toFixed(1);
+  const up = p.uptime ? _fmtUp(p.uptime) : '--';
+  function bar(pct, c) { return `<div class="res-bar"><div class="res-bar-f" style="width:${pct}%;background:${c}"></div></div>`; }
+  return `<div class="vd-pane act">
+    <div class="vd-stats">
+      <div class="vd-stat"><div class="vd-stat-v" style="color:${cpu>80?'var(--red)':cpu>60?'var(--amber)':'var(--green)'}">${cpu}%</div><div class="vd-stat-l">CPU</div></div>
+      <div class="vd-stat"><div class="vd-stat-v">${mgb} GB</div><div class="vd-stat-l">RAM Used</div></div>
+      <div class="vd-stat"><div class="vd-stat-v">${mmax} GB</div><div class="vd-stat-l">RAM Total</div></div>
+      <div class="vd-stat"><div class="vd-stat-v">${up}</div><div class="vd-stat-l">Uptime</div></div>
+    </div>
+    <div style="max-width:580px">
+      <div class="res-row"><div class="res-lbl"><span>CPU</span><span>${cpu}%</span></div>${bar(cpu, cpu>80?'var(--red)':cpu>60?'var(--amber)':'var(--green)')}</div>
+      <div class="res-row"><div class="res-lbl"><span>RAM</span><span>${mgb} / ${mmax} GB</span></div>${bar(mpct, mpct>85?'var(--red)':mpct>70?'var(--amber)':'var(--blue)')}</div>
+      <div style="margin-top:14px;font-size:11px;color:var(--text3)">Updated every 10 seconds from Proxmox API.</div>
+    </div>
+  </div>`;
+}
+
+function _fmtUp(s) {
+  const d=Math.floor(s/86400), h=Math.floor((s%86400)/3600), m=Math.floor((s%3600)/60);
+  return [d?d+'d':'', h?h+'h':'', m?m+'m':''].filter(Boolean).join(' ') || '<1m';
+}
+
+function _vdPanePower(v) {
+  const can = S.session?.role !== 'readonly' && !!v.vmid;
+  const dis = !can ? 'disabled' : '';
+  const pb = (a,ico,lbl,cls) => `<button class="btn ${cls}" onclick="powerAction('${v.id}','${a}')" style="display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center;padding:10px" ${dis}>${ico} ${lbl}</button>`;
+  const iPlay   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  const iStop   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`;
+  const iReboot = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`;
+  const iPwr    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>`;
+  return `<div class="vd-pane act">
+    ${!v.vmid ? `<div style="text-align:center;padding:60px 0;color:var(--text3)"><div style="font-size:13px;margin-bottom:5px">No VMID</div><div style="font-size:11.5px">Available after deployment.</div></div>` : `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:380px">
+      ${pb('start',   iPlay,   'Start',      'btn-start')}
+      ${pb('stop',    iStop,   'Force Off',  'btn-stop')}
+      ${pb('reboot',  iReboot, 'Reboot',     'btn-reboot')}
+      ${pb('shutdown',iPwr,    'Shutdown',   'btn-stop')}
+    </div>
+    <div style="margin-top:14px;font-size:11.5px;color:var(--text2)">
+      <strong>Force Off</strong> -- immediate power cut.&nbsp;
+      <strong>Shutdown</strong> -- graceful via guest agent.
+    </div>`}
+  </div>`;
+}
+
 
 function showHostDetail(id) {
   const h = hb(id); if (!h) return;
@@ -1206,7 +1488,7 @@ async function pollVmStatus() {
         v.status=newStatus; v.prog=pve.status==='running'?100:0; v.vmid=pve.vmid; changed=true;
       }
     });
-    if (changed) { renderGrid(); renderTree(q()); if (S.selVm) showVmDetail(S.selVm); }
+    if (changed) { renderGrid(); renderTree(q()); if (S.selVm && _vdTab==='resources') $('vd-content').innerHTML=_vdPaneResources(vb(S.selVm)); }
   } catch(_) {}
 }
 function startVmPolling() { clearInterval(_vmPollInterval); pollVmStatus(); _vmPollInterval = setInterval(pollVmStatus, 10000); }
@@ -1456,22 +1738,37 @@ function openModal(type, id, fromCurrentConfig) {
 
   if (type==='host') {
     $('modal-title').textContent = 'Add Proxmox Host';
-    const orgOpts = S.orgs.length
-      ? '<div class="ff"><label>Organisation (optional)</label><select id="m-org-id"><option value="">— No organisation —</option>'
-        + S.orgs.map(o=>'<option value="'+o.id+'">'+o.name+'</option>').join('')
-        + '</select></div>'
-      : '';
+    if (!S.orgs.length) {
+      $('modal-body').innerHTML = `
+        <div style="text-align:center;padding:20px 0;color:var(--text2)">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px;opacity:.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">No organisations yet</div>
+          <div style="font-size:12px;color:var(--text3)">Create an organisation first. Hosts must belong to an organisation so their network defaults and credentials are properly configured.</div>
+        </div>`;
+      $('modal-foot').innerHTML = '<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="closeModal();openModal(\'new-org\')">Create Organisation</button>';
+      return;
+    }
+    const _firstOd = S.orgs[0]?.defaults || {};
+    window._hostOrgChanged = (orgId) => {
+      const d = S.orgs.find(o=>o.id===orgId)?.defaults || {};
+      if ($('m-stor'))   $('m-stor').value   = d.storage   || 'local-lvm';
+      if ($('m-bridge')) $('m-bridge').value = d.bridge    || 'vmbr0';
+      if ($('m-dvlan'))  $('m-dvlan').value  = d.vlan      || '';
+      if ($('m-tmpl') && !$('m-tmpl').value) $('m-tmpl').placeholder = d.templateName || 'win2025-template';
+    };
     $('modal-body').innerHTML =
-      '<div class="ff"><label>Display Name</label><input id="m-name" autocomplete="off" placeholder="pve-main"></div>'
+      '<div class="ff"><label>Organisation</label><select id="m-org-id" onchange="_hostOrgChanged(this.value)">'
+      + S.orgs.map(o=>'<option value="'+o.id+'">'+o.name+'</option>').join('')
+      + '</select></div>'
+      + '<div class="ff"><label>Display Name</label><input id="m-name" autocomplete="off" placeholder="pve-main"></div>'
       + '<div class="g2"><div class="ff"><label>Host IP / FQDN</label><input id="m-host" autocomplete="off" placeholder="172.16.10.2"></div>'
       + '<div class="ff"><label>Node Name</label><input id="m-node" autocomplete="off" value="pve"></div></div>'
       + '<div class="ff"><label>API Token ID</label><input id="m-tokid" autocomplete="off" placeholder="root@pam!deployment-token"></div>'
       + '<div class="ff"><label>API Token Secret</label><input type="password" id="m-toksec" autocomplete="new-password"></div>'
-      + '<div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" placeholder="win2025-template"></div>'
-      + '<div class="g2"><div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="local-lvm"></div>'
-      + '<div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="vmbr0"></div></div>'
-      + '<div class="ff"><label>Default VLAN (optional)</label><input id="m-dvlan" autocomplete="off" placeholder="10"></div>'
-      + orgOpts;
+      + '<div class="ff"><label>Template VM Name</label><input id="m-tmpl" autocomplete="off" placeholder="'+(_firstOd.templateName||'win2025-template')+'"></div>'
+      + '<div class="g2"><div class="ff"><label>Storage Pool</label><input id="m-stor" autocomplete="off" value="'+(_firstOd.storage||'local-lvm')+'"></div>'
+      + '<div class="ff"><label>Network Bridge</label><input id="m-bridge" autocomplete="off" value="'+(_firstOd.bridge||'vmbr0')+'"></div></div>'
+      + '<div class="ff"><label>Default VLAN</label><input id="m-dvlan" autocomplete="off" value="'+(_firstOd.vlan||'')+'" placeholder="from org"></div>';
     $('modal-foot').innerHTML =
       '<button class="btn btn-g" onclick="closeModal()">Cancel</button>'
       + '<button class="btn btn-a" onclick="saveHost()">Save Host</button>';
@@ -1531,6 +1828,7 @@ function openModal(type, id, fromCurrentConfig) {
       // Prefill defaults from org (only if field is still at default/empty)
       if (od.vlan)   { const f=$('m-vlan');      if (!f.dataset.touched) f.placeholder=od.vlan; }
       if (od.bridge) { const f=$('m-bridge-vm'); if (!f.dataset.touched) f.placeholder=od.bridge; }
+      if (od.domain) { const f=$('m-domain');    if (f && !f.dataset.touched) f.placeholder=od.domain; }
       // IP placeholder
       const netPfx = od.netPrefix || '';
       const ipf = $('m-ip');
@@ -1564,6 +1862,7 @@ function openModal(type, id, fromCurrentConfig) {
       <div class="g2">
         <div class="ff"><label>VLAN override</label><input id="m-vlan" autocomplete="off" placeholder="from org" oninput="this.dataset.touched='1'"></div>
         <div class="ff"><label>Bridge override</label><input id="m-bridge-vm" autocomplete="off" placeholder="from org" oninput="this.dataset.touched='1'"></div>
+        <div class="ff"><label>Domain (leave blank for org default)</label><input id="m-domain" autocomplete="off" placeholder="from org" oninput="this.dataset.touched='1'"></div>
       </div>`;
     $('modal-foot').innerHTML = `<button class="btn btn-g" onclick="closeModal()">Cancel</button><button class="btn btn-a" onclick="saveVm()">+ Add VM</button>`;
     // Trigger org change to populate hosts + defaults
@@ -1708,10 +2007,12 @@ function applyRoleDef(role) {
 async function saveHost() {
   const n=($('m-name').value||'').trim(), h=($('m-host').value||'').trim();
   if (!n||!h) { toast('Name and host IP required'); return; }
+  const _hostOrgId = $('m-org-id')?.value||'';
+  if (!_hostOrgId) { toast('Select an organisation'); return; }
   const newHost = { name:n, host:h, node:$('m-node').value||'pve', tokenId:$('m-tokid').value,
     tokenSecret:$('m-toksec').value, templateName:$('m-tmpl').value||'win2025-template',
     storage:$('m-stor').value||'local-lvm', bridge:$('m-bridge').value||'vmbr0',
-    defaultVlan:$('m-dvlan').value||'', orgId:($('m-org-id')?.value||'') };
+    defaultVlan:$('m-dvlan').value||'', orgId:_hostOrgId };
   try { await api('POST','/api/hosts',newHost); await loadState(); closeModal(); renderAll(); toast('Host added',false); } catch(e) { toast(e.message); }
 }
 
@@ -1734,7 +2035,7 @@ async function saveVm() {
   const vm = { hostId, orgId, role:$('m-role').value, hostname:hn, name:hn, ip,
     cpus:+$('m-cpus').value||S.settings.cpus, ram:+$('m-ram').value||S.settings.ram,
     disk:+$('m-disk').value||S.settings.disk, vlan:$('m-vlan').value||'',
-    bridge:$('m-bridge-vm').value||'', status:'pending', prog:0 };
+    bridge:$('m-bridge-vm').value||'', domain:$('m-domain')?.value||'', status:'pending', prog:0 };
   try { const r=await api('POST','/api/vms',vm); if (r.vm) S.vms.push(r.vm); closeModal(); renderAll(); } catch(e) { toast(e.message); }
 }
 
@@ -1785,6 +2086,7 @@ async function saveNewOrg() {
     vlan: $('org-vlan').value||'', bridge: $('org-bridge').value||'',
     storage: $('org-storage').value||'', templateName: $('org-tmpl').value||'',
     pass: $('org-pass').value||'',
+    domain: $('org-domain')?.value||'',
   };
   try {
     const r = await api('POST','/api/organisations',{ name, description:$('org-desc').value, defaults });
@@ -1803,6 +2105,7 @@ async function saveEditOrg(id) {
     vlan: $('org-vlan').value||'', bridge: $('org-bridge').value||'',
     storage: $('org-storage').value||'', templateName: $('org-tmpl').value||'',
     pass: $('org-pass').value||'',
+    domain: $('org-domain')?.value||'',
   };
   try {
     await api('PUT',`/api/organisations/${id}`,{ name, description:$('org-desc').value, defaults });
@@ -1849,6 +2152,7 @@ function orgDefaultsForm(d) {
       <div class='ff'><label>Template VM Name</label><input id='org-tmpl' autocomplete='off' value='${d.templateName||""}' placeholder='win2025-template'></div>
     </div>
     <div class='ff'><label>Windows Admin Password</label><input id='org-pass' autocomplete='off' data-1p-ignore data-lpignore='true' value='${d.pass||""}' placeholder='Asdf1234!' style='font-family:var(--mono)'></div>
+    <div class='ff'><label>AD Domain (auto-join all VMs in this org)</label><input id='org-domain' autocomplete='off' value='${d.domain||""}' placeholder='contoso.local'></div>
     </div>`;
 }
 
@@ -1859,8 +2163,10 @@ function renderAll() {
   if (S.view==='deploy') { populateDepOrgSel(); renderDeploy(); }
   if (S.view==='templates') loadTemplates();
   if (S.view==='admin') loadUsers();
-  if (S.selVm) showVmDetail(S.selVm);
-  else if (S.selHost) showHostDetail(S.selHost);
+  if (S.selVm && $('view-vm-detail').style.display !== 'none') {
+    const _rv = vb(S.selVm); if (_rv) { _vdRenderHeader(_rv); _vdRenderTabs(_rv); }
+  } else if (S.selHost) showHostDetail(S.selHost);
+  else if (S.selOrg) showOrgDetail(S.selOrg);
 }
 
 // ── App Init ───────────────────────────────────────────────────────────────────
@@ -2345,7 +2651,7 @@ except Exception as e:
   try {
     const out = execSync(`python3 -c ${JSON.stringify(script)} ${JSON.stringify(h.host)} ${JSON.stringify(h.tokenId)} ${JSON.stringify(h.tokenSecret)} ${JSON.stringify(h.node)}`, { timeout: 10000 }).toString();
     const pveVms = JSON.parse(out);
-    const statusMap = {};
+    const statusMap = {}; S._pveStatus = statusMap;
     for (const vm of pveVms) {
       statusMap[vm.name] = { vmid: vm.vmid, status: vm.status, uptime: vm.uptime||0, cpu: vm.cpu||0, mem: vm.mem||0, maxmem: vm.maxmem||0 };
     }
@@ -2617,6 +2923,93 @@ app.post('/api/deploy/abort', auth('deploy'), (req, res) => {
   res.json({ success: true, cleaning: vmids });
 });
 
+// ── AD Setup endpoint ────────────────────────────────────────────────────────
+app.post('/api/vms/:id/ad-setup', auth('deploy'), (req, res) => {
+  const c  = load();
+  const vm = (c.vms||[]).find(v => v.id === req.params.id);
+  if (!vm)          return res.status(404).json({ error: 'VM not found' });
+  if (!vm.vmid)     return res.status(400).json({ error: 'VM not deployed yet (no VMID)' });
+  if (vm.role !== 'dc') return res.status(400).json({ error: 'AD setup only for Domain Controller role' });
+  const h   = (c.hosts||[]).find(h => h.id === vm.hostId);
+  if (!h)   return res.status(400).json({ error: 'Host not found' });
+  const orgs = loadJson(ORGS_FILE, []);
+  const org  = orgs.find(o => o.id === h.orgId);
+  const od   = org?.defaults || {};
+  const s    = c.settings || {};
+  const ac   = vm.adConfig || {};
+  const pick = (...vals) => vals.find(v => v !== undefined && v !== null && v !== '') || '';
+  const partnerVm = ac.replPartner ? (c.vms||[]).find(v => v.id === ac.replPartner) : null;
+  const failVm    = ac.failPartner  ? (c.vms||[]).find(v => v.id === ac.failPartner)  : null;
+  const adVars = {
+    dc_hostname:          vm.hostname,
+    dc_ip:                vm.ip,
+    dc_domain:            pick(ac.domain, od.domain, 'contoso.local'),
+    dc_netbios:           pick(ac.netbios, pick(ac.domain, od.domain, '').split('.')[0]?.toUpperCase()),
+    dc_forest_mode:       ac.forestMode || 'WinThreshold',
+    dc_safe_mode_pw:      pick(ac.safeModePw, od.pass, s.pass, 'Asdf1234!'),
+    dc_is_primary:        ac.isPrimary !== false,
+    dc_is_rodc:           !!ac.isRODC,
+    dc_admin_pw:          pick(od.pass, s.pass, 'Asdf1234!'),
+    win_timezone:         s.tz || 'W. Europe Standard Time',
+    dc_dns_zones:         JSON.stringify(ac.dnsZones || []),
+    dc_dhcp_scopes:       JSON.stringify(ac.dhcpScopes || []),
+    dc_dhcp_failover:     !!ac.dhcpFailover,
+    dc_failover_partner:  failVm?.ip || '',
+    dc_enable_repl:       !!ac.enableRepl,
+    dc_repl_partner_ip:   partnerVm?.ip || '',
+  };
+  const safeUser = req.session.username.replace(/[^a-z0-9_]/gi, '_');
+  const evFile   = path.join(ADIR, 'inventory', `_ad_ev_${safeUser}.json`);
+  const invFile  = path.join(ADIR, 'inventory', `_ad_inv_${safeUser}.ini`);
+  fs.writeFileSync(evFile, JSON.stringify(adVars));
+  fs.writeFileSync(invFile,
+    `[dc]
+${vm.hostname} ansible_host=${vm.ip}
+
+[dc:vars]
+` +
+    `ansible_user=Administrator
+ansible_password=${adVars.dc_admin_pw}
+` +
+    `ansible_connection=winrm
+ansible_winrm_transport=basic
+` +
+    `ansible_winrm_port=5985
+ansible_winrm_server_cert_validation=ignore
+` +
+    `ansible_winrm_scheme=http
+`
+  );
+  const session = getOrInitDeploy(req.session.username);
+  if (session.running) return res.status(409).json({ error: 'A deploy is already running for your account' });
+  session.running = true; session.exitCode = 0;
+  session.startedAt = new Date().toISOString();
+  session.orgId = h.orgId; session.orgName = org?.name || '';
+  session.vms   = [{ hostname: vm.hostname, ip: vm.ip, role: 'dc' }];
+  session.log   = `[AD Setup] Starting on ${vm.hostname} (${vm.ip})
+`;
+  persistDeploys();
+  res.json({ success: true });
+  const apBin = `$(python3 -c "import shutil; print(shutil.which('ansible-playbook') or '/usr/local/bin/ansible-playbook')")`;
+  const cmd = `cd "${ADIR}" && ${apBin} ad_setup.yml -i inventory/_ad_inv_${safeUser}.ini -e "@inventory/_ad_ev_${safeUser}.json" 2>&1`;
+  const proc = exec(cmd);
+  session.proc = proc;
+  let ft = null; const flush = () => persistDeploys();
+  proc.stdout?.on('data', d => { session.log += d; clearTimeout(ft); ft = setTimeout(flush, 500); });
+  proc.stderr?.on('data', d => { session.log += d; clearTimeout(ft); ft = setTimeout(flush, 500); });
+  proc.on('close', code => {
+    session.running = false; session.proc = null; session.exitCode = code;
+    session.log += `
+[AD Setup] Finished with exit code ${code}
+`;
+    persistDeploys();
+    appendHistory({ startedAt: session.startedAt, finishedAt: new Date().toISOString(),
+      startedBy: req.session.username, orgId: h.orgId, orgName: org?.name||'',
+      exitCode: code, vmCount: 1, vms: [{ hostname: vm.hostname, ip: vm.ip, role: 'dc' }] });
+    try { fs.unlinkSync(evFile); fs.unlinkSync(invFile); } catch(_) {}
+  });
+});
+
 // ── Static + catch-all ──────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../frontend/index.html')));
@@ -2719,6 +3112,119 @@ proxmox_template_name: "win2025-template"
 proxmox_storage: "local-lvm"
 proxmox_bridge: "vmbr0"
 EOF
+
+  # ── ansible/ad_setup.yml ────────────────────────────────────────────────────
+  cat > "${DIR}/ansible/ad_setup.yml" << 'ADEOF'
+---
+- name: AD Post-Setup
+  hosts: dc
+  gather_facts: no
+  tasks:
+
+    - name: Wait for WinRM
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Install AD DS and DNS roles
+      ansible.builtin.raw: >
+        Install-WindowsFeature AD-Domain-Services,DNS,RSAT-AD-Tools,RSAT-DNS-Server,GPMC -IncludeManagementTools
+
+    - name: Promote as primary DC (new forest)
+      ansible.builtin.raw: |
+        Import-Module ADDSDeployment
+        Install-ADDSForest `
+          -DomainName "{{ dc_domain }}" `
+          -DomainNetbiosName "{{ dc_netbios }}" `
+          -ForestMode "{{ dc_forest_mode }}" `
+          -DomainMode "{{ dc_forest_mode }}" `
+          -SafeModeAdministratorPassword (ConvertTo-SecureString "{{ dc_safe_mode_pw }}" -AsPlainText -Force) `
+          -InstallDns `
+          -Force `
+          -NoRebootOnCompletion
+      when: dc_is_primary | bool
+      ignore_errors: yes
+
+    - name: Promote as secondary DC
+      ansible.builtin.raw: |
+        Import-Module ADDSDeployment
+        Install-ADDSDomainController `
+          -DomainName "{{ dc_domain }}" `
+          -SafeModeAdministratorPassword (ConvertTo-SecureString "{{ dc_safe_mode_pw }}" -AsPlainText -Force) `
+          -Credential (New-Object PSCredential("{{ dc_netbios }}\Administrator",(ConvertTo-SecureString "{{ dc_admin_pw }}" -AsPlainText -Force))) `
+          -Force `
+          -NoRebootOnCompletion
+      when: not (dc_is_primary | bool)
+      ignore_errors: yes
+
+    - name: Reboot after promotion
+      ansible.builtin.raw: Restart-Computer -Force
+      ignore_errors: yes
+
+    - name: Wait for DC to come back
+      ansible.builtin.wait_for_connection:
+        delay: 60
+        timeout: 300
+
+    - name: Create additional DNS forward zones
+      ansible.builtin.raw: |
+        $zones = '{{ dc_dns_zones }}' | ConvertFrom-Json
+        foreach ($z in $zones) {
+          if ($z -and -not (Get-DnsServerZone -Name $z -ErrorAction SilentlyContinue)) {
+            Add-DnsServerPrimaryZone -Name $z -ReplicationScope Domain
+            Write-Host "Created DNS zone: $z"
+          }
+        }
+      ignore_errors: yes
+
+    - name: Create reverse lookup zone
+      ansible.builtin.raw: |
+        $octets = "{{ dc_ip }}".Split('.')
+        $revNet = "$($octets[2]).$($octets[1]).$($octets[0]).in-addr.arpa"
+        $netId  = "$($octets[0]).$($octets[1]).$($octets[2]).0/24"
+        if (-not (Get-DnsServerZone -Name $revNet -ErrorAction SilentlyContinue)) {
+          Add-DnsServerPrimaryZone -NetworkId $netId -ReplicationScope Domain
+          Write-Host "Created reverse zone: $revNet"
+        }
+      ignore_errors: yes
+
+    - name: Install and authorize DHCP
+      ansible.builtin.raw: |
+        Install-WindowsFeature DHCP,RSAT-DHCP -IncludeManagementTools
+        Add-DhcpServerInDC -DnsName "{{ dc_hostname }}.{{ dc_domain }}" -IPAddress "{{ dc_ip }}"
+      ignore_errors: yes
+
+    - name: Create DHCP scopes
+      ansible.builtin.raw: |
+        $scopes = '{{ dc_dhcp_scopes }}' | ConvertFrom-Json
+        $i = 1
+        foreach ($sc in $scopes) {
+          if (-not $sc.start -or -not $sc.end) { $i++; continue }
+          $bits  = [int]$sc.pfx
+          $mask  = ([string]([System.Net.IPAddress]([UInt32]::MaxValue -shl (32-$bits) -band [UInt32]::MaxValue))).ToString()
+          $sid   = ($sc.start -replace '(\d+\.\d+\.\d+)\.\d+','$1.0')
+          Add-DhcpServerv4Scope -Name "Scope $i" -StartRange $sc.start -EndRange $sc.end `
+            -SubnetMask $mask -State Active -LeaseDuration ([TimeSpan]::FromDays([int]$sc.lease))
+          if ($sc.gw) { Set-DhcpServerv4OptionValue -ScopeId $sid -Router $sc.gw }
+          Set-DhcpServerv4OptionValue -ScopeId $sid -DnsServer "{{ dc_ip }}" -DnsDomain "{{ dc_domain }}"
+          Write-Host "Created DHCP scope $i: $($sc.start) - $($sc.end)"
+          $i++
+        }
+      when: dc_dhcp_scopes != '[]'
+      ignore_errors: yes
+
+    - name: Configure DHCP failover
+      ansible.builtin.raw: |
+        $scopes = Get-DhcpServerv4Scope | Select-Object -ExpandProperty ScopeId
+        foreach ($sid in $scopes) {
+          Add-DhcpServerv4Failover -Name "FO-$sid" -PartnerServer "{{ dc_failover_partner }}" `
+            -ScopeId $sid -LoadBalancePercent 50 `
+            -MaxClientLeadTime (New-TimeSpan -Hours 1) -Force
+          Write-Host "Failover configured for scope $sid"
+        }
+      when: dc_dhcp_failover | bool and dc_failover_partner != ""
+      ignore_errors: yes
+ADEOF
+
 
   # ---------------------------------------------------------------------------
   # ROLE: proxmox_provision
