@@ -2014,8 +2014,8 @@ function applyRoleDef(role) {
 }
 
 async function saveHost() {
-  const n=($('m-name').value||'').trim(), h=($('m-host').value||'').trim();
-  if (!n||!h) { toast('Name and host IP required'); return; }
+  const h=($('m-host').value||'').trim();
+  if (!h) { toast('Host IP required'); return; }
   const _hostOrgId = $('m-org-id')?.value||'';
   if (!_hostOrgId) { toast('Select an organisation'); return; }
   const node = $('m-node').value||'pve';
